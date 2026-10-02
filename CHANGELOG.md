@@ -6,6 +6,15 @@ four-part plugin versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- The library is read once for every user instead of once per user, and held in memory once.
+
+### Removed
+
+- `GET /Cinematheque/Directors` and `/Actors`, and the `director` and `actor` filters of
+  `/Films`, kept from 0.1. Use `People/{role}` and the `person` and `role` filters.
+
 ### Fixed
 
 - "Show more" no longer fails past 480 people or films. It adds the next page to the list
@@ -13,6 +22,9 @@ four-part plugin versioning.
 - A movement collection is no longer left out of sync for good when a sync fails or is
   cancelled halfway. Collections are recorded as soon as they are created, and one failing
   movement no longer stops the others.
+- When the configuration page fails to load the settings, saving no longer erases the added
+  and edited movements. A failed save no longer leaves the page loading forever.
+- Names sort ignoring accents: Éric Rohmer comes among the E, not after Z.
 
 ### Security
 

@@ -88,6 +88,12 @@ Collections are named in the server's display language and follow their movement
 library scan: films added to them by hand are removed. Cinematheque only touches the
 collections it created, never deletes one, and never replaces a poster you set yourself.
 
+Collections follow Jellyfin's rules rather than the tab's. A user who can open one of the
+libraries a collection draws from sees the collection, but only the films they are allowed to
+see inside it. Its poster is drawn from all its films, though, so it can show a film from a
+library that user cannot open. If your libraries are split by audience, set the posters by hand
+or leave collections off.
+
 Built-in movements ship with the plugin and improve with each release, in English and French.
 The configuration page lists them in a form: edit one and your version is kept instead, hide the
 ones you do not want, or add your own. Only your changes are saved, and an import/export as JSON
