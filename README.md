@@ -89,8 +89,11 @@ or when it matches every rule that is set:
 
 - `Countries`: ISO codes (`HK`) or English names (`Hong Kong`); any of them qualifies.
 - `YearFrom` and `YearTo`: inclusive bounds; either can be left out.
-- `Directors`, `Genres`, `Tags`: any of them qualifies. Names are compared without accents
-  or punctuation, so `Nagisa Oshima` matches `Nagisa Ōshima`.
+- `Directors`: any of them qualifies. Write a name, a TMDB person id (`tmdb:25236`) or both
+  (`Johnnie To (tmdb:25236)`). The id matches the person whatever script their credits use,
+  such as `杜琪峯`; names are compared without accents or punctuation, so `Nagisa Oshima`
+  matches `Nagisa Ōshima`.
+- `Genres`, `Tags`: any of them qualifies, compared like names.
 - An empty list means "no rule". A movement with no country, director, genre or tag rule
   only matches its `TmdbIds`.
 
@@ -100,11 +103,10 @@ The tab is a client for a small REST API, available to any authenticated user:
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /Cinematheque/Directors` | Directors, with `search`, `minFilms`, `sortBy` (`count` or `name`), `startIndex`, `limit` |
-| `GET /Cinematheque/Actors` | Actors, same parameters |
+| `GET /Cinematheque/People/{role}` | People in a role (`directors`, `actors`), with `search`, `minFilms`, `sortBy` (`count` or `name`), `startIndex`, `limit` |
 | `GET /Cinematheque/Countries` | Countries with film counts, decades and leading directors |
 | `GET /Cinematheque/Movements` | Movements with film counts |
-| `GET /Cinematheque/Films` | Films filtered by `country`, `director`, `actor`, `movement`, `decade` |
+| `GET /Cinematheque/Films` | Films filtered by `country`, `person` (a key such as `tmdb:25236`, or a name) with `role`, `movement`, `decade` |
 
 ## How it works
 

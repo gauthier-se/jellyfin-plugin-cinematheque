@@ -13,4 +13,4 @@ public sealed record CountrySummary(
     Country Country,
     int FilmCount,
     IReadOnlyList<DecadeCount> Decades,
-    IReadOnlyList<string> Directors);
+    IReadOnlyList<PersonLink> Directors);

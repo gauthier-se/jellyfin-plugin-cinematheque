@@ -16,7 +16,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Jellyfin.Plugin.Cinematheque.Api;
 
 /// <summary>
-/// The Cinematheque API: directors, actors, countries, movements and filtered film lists.
+/// The Cinematheque API: people, countries, movements and filtered film lists.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -48,7 +48,34 @@ public class CinemathequeController : ControllerBase
     private static PluginConfiguration Configuration => Plugin.Instance?.Configuration ?? new PluginConfiguration();
 
     /// <summary>
-    /// Lists the directors in the user's films.
+    /// Lists the people credited in a role in the user's films.
+    /// </summary>
+    /// <param name="role">The role, such as <c>directors</c> or <c>actors</c>.</param>
+    /// <param name="search">Only names containing this text.</param>
+    /// <param name="minFilms">The minimum number of films. Defaults to the configured value.</param>
+    /// <param name="sortBy">Either <c>count</c> (default) or <c>name</c>.</param>
+    /// <param name="startIndex">The index of the first result.</param>
+    /// <param name="limit">The maximum number of results.</param>
+    /// <returns>A page of people.</returns>
+    [HttpGet("People/{role}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<PageDto<PersonDto>> GetPeople(
+        [FromRoute] string role,
+        [FromQuery] string? search,
+        [FromQuery] int? minFilms,
+        [FromQuery] string? sortBy,
+        [FromQuery, Range(0, int.MaxValue)] int startIndex = 0,
+        [FromQuery, Range(1, MaxPageSize)] int limit = 100)
+    {
+        PersonRole? parsed = ParseRole(role);
+        return parsed is PersonRole r
+            ? GetPeople(r, search, minFilms, sortBy, startIndex, limit)
+            : NotFound();
+    }
+
+    /// <summary>
+    /// Lists the directors in the user's films. Same as <c>People/directors</c>.
     /// </summary>
     /// <param name="search">Only names containing this text.</param>
     /// <param name="minFilms">The minimum number of films. Defaults to the configured value.</param>
@@ -64,10 +91,10 @@ public class CinemathequeController : ControllerBase
         [FromQuery] string? sortBy,
         [FromQuery, Range(0, int.MaxValue)] int startIndex = 0,
         [FromQuery, Range(1, MaxPageSize)] int limit = 100)
-        => GetPeople(PersonRole.Director, search, minFilms ?? Configuration.MinDirectorFilms, sortBy, startIndex, limit);
+        => GetPeople(PersonRole.Director, search, minFilms, sortBy, startIndex, limit);
 
     /// <summary>
-    /// Lists the actors in the user's films.
+    /// Lists the actors in the user's films. Same as <c>People/actors</c>.
     /// </summary>
     /// <param name="search">Only names containing this text.</param>
     /// <param name="minFilms">The minimum number of films. Defaults to the configured value.</param>
@@ -83,7 +110,7 @@ public class CinemathequeController : ControllerBase
         [FromQuery] string? sortBy,
         [FromQuery, Range(0, int.MaxValue)] int startIndex = 0,
         [FromQuery, Range(1, MaxPageSize)] int limit = 100)
-        => GetPeople(PersonRole.Actor, search, minFilms ?? Configuration.MinActorFilms, sortBy, startIndex, limit);
+        => GetPeople(PersonRole.Actor, search, minFilms, sortBy, startIndex, limit);
 
     /// <summary>
     /// Lists the production countries in the user's films.
@@ -105,7 +132,7 @@ public class CinemathequeController : ControllerBase
                 c.Country.Name,
                 c.FilmCount,
                 c.Decades.Select(d => new DecadeDto(d.Decade, d.FilmCount)).ToArray(),
-                c.Directors))
+                c.Directors.Select(d => new PersonLinkDto(d.Key, d.Name)).ToArray()))
             .ToArray());
     }
 
@@ -149,8 +176,10 @@ public class CinemathequeController : ControllerBase
     /// Lists films, narrowed by any combination of filters.
     /// </summary>
     /// <param name="country">A country code.</param>
-    /// <param name="director">A director name.</param>
-    /// <param name="actor">An actor name.</param>
+    /// <param name="person">A person key, such as <c>tmdb:25236</c>, or a name.</param>
+    /// <param name="role">The role the person is credited in, such as <c>directors</c>. Any role when unset.</param>
+    /// <param name="director">Deprecated: a director name. Use <paramref name="person"/> and <paramref name="role"/>.</param>
+    /// <param name="actor">Deprecated: an actor name. Use <paramref name="person"/> and <paramref name="role"/>.</param>
     /// <param name="movement">A movement id.</param>
     /// <param name="decade">A decade, such as 1960.</param>
     /// <param name="startIndex">The index of the first result.</param>
@@ -160,6 +189,8 @@ public class CinemathequeController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<FilmPageDto> GetFilms(
         [FromQuery] string? country,
+        [FromQuery] string? person,
+        [FromQuery] string? role,
         [FromQuery] string? director,
         [FromQuery] string? actor,
         [FromQuery] string? movement,
@@ -173,16 +204,26 @@ public class CinemathequeController : ControllerBase
             return Unauthorized();
         }
 
+        PersonRole? personRole = ParseRole(role);
+        if (string.IsNullOrWhiteSpace(person) && !string.IsNullOrWhiteSpace(director))
+        {
+            (person, personRole) = (director, PersonRole.Director);
+        }
+        else if (string.IsNullOrWhiteSpace(person) && !string.IsNullOrWhiteSpace(actor))
+        {
+            (person, personRole) = (actor, PersonRole.Actor);
+        }
+
         FilmCatalog catalog = _catalogProvider.GetCatalog(user);
 
         // Decades are computed before the decade filter so the client can switch between them.
-        Film[] unfiltered = catalog.Filter(new FilmFilter(country, director, actor, movement)).ToArray();
+        Film[] unfiltered = catalog.Filter(new FilmFilter(country, person, personRole, movement)).ToArray();
         DecadeDto[] decades = FilmCatalog.CountByDecade(unfiltered).Select(d => new DecadeDto(d.Decade, d.FilmCount)).ToArray();
         Film[] films = decade is null ? unfiltered : unfiltered.Where(f => f.Decade == decade).ToArray();
 
         return Ok(new FilmPageDto(
             films.Skip(startIndex).Take(limit)
-                .Select(f => new FilmDto(f.Id, f.Name, f.Year, f.Countries.Select(ToDto).ToArray(), f.Directors))
+                .Select(f => new FilmDto(f.Id, f.Name, f.Year, f.Countries.Select(ToDto).ToArray(), f.Directors.Select(d => d.Name).ToArray()))
                 .ToArray(),
             films.Length,
             decades));
@@ -190,7 +231,17 @@ public class CinemathequeController : ControllerBase
 
     private static CountryDto ToDto(Catalog.Country country) => new CountryDto(country.Code, country.Name);
 
-    private ActionResult<PageDto<PersonDto>> GetPeople(PersonRole role, string? search, int minFilms, string? sortBy, int startIndex, int limit)
+    private static PersonRole? ParseRole(string? role) => role?.Trim().ToUpperInvariant() switch
+    {
+        "DIRECTOR" or "DIRECTORS" => PersonRole.Director,
+        "ACTOR" or "ACTORS" => PersonRole.Actor,
+        _ => null,
+    };
+
+    private static int DefaultMinFilms(PersonRole role)
+        => role == PersonRole.Actor ? Configuration.MinActorFilms : Configuration.MinDirectorFilms;
+
+    private ActionResult<PageDto<PersonDto>> GetPeople(PersonRole role, string? search, int? minFilms, string? sortBy, int startIndex, int limit)
     {
         User? user = GetUser();
         if (user is null)
@@ -198,8 +249,9 @@ public class CinemathequeController : ControllerBase
             return Unauthorized();
         }
 
+        int min = minFilms ?? DefaultMinFilms(role);
         IEnumerable<PersonSummary> people = _catalogProvider.GetCatalog(user).GetPeople(role)
-            .Where(p => p.FilmCount >= minFilms);
+            .Where(p => p.FilmCount >= min);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -217,6 +269,8 @@ public class CinemathequeController : ControllerBase
             all.Skip(startIndex).Take(limit)
                 .Select(p => new PersonDto(
                     _libraryManager.GetPersonId(p.Name),
+                    p.Key,
+                    p.TmdbId,
                     p.Name,
                     p.FilmCount,
                     p.FirstYear,

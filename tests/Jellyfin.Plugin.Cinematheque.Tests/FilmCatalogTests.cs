@@ -74,13 +74,13 @@ public class FilmCatalogTests
 
         Assert.Equal([1980, 1990, 2000], [.. hongKong.Decades.Select(d => d.Decade)]);
         Assert.Equal([2, 2, 1], [.. hongKong.Decades.Select(d => d.FilmCount)]);
-        Assert.Equal(["John Woo", "Wong Kar-wai"], hongKong.Directors);
+        Assert.Equal(["John Woo", "Wong Kar-wai"], hongKong.Directors.Select(d => d.Name));
     }
 
     [Fact]
     public void Filter_combines_country_and_director_oldest_first()
     {
-        var films = _catalog.Filter(new FilmFilter(Country: "HK", Director: "john woo")).ToArray();
+        var films = _catalog.Filter(new FilmFilter(Country: "HK", Person: "john woo", Role: PersonRole.Director)).ToArray();
 
         Assert.Equal(["A Better Tomorrow", "The Killer", "Hard Boiled"], [.. films.Select(f => f.Name)]);
     }
@@ -96,7 +96,7 @@ public class FilmCatalogTests
     [Fact]
     public void Filter_by_actor()
     {
-        var films = _catalog.Filter(new FilmFilter(Actor: "Tony Leung Chiu-wai")).ToArray();
+        var films = _catalog.Filter(new FilmFilter(Person: "Tony Leung Chiu-wai", Role: PersonRole.Actor)).ToArray();
 
         Assert.Equal(3, films.Length);
     }
@@ -129,4 +129,71 @@ public class FilmCatalogTests
 
         Assert.Equal([new DecadeCount(1960, 2), new DecadeCount(1970, 1)], decades);
     }
+
+    [Fact]
+    public void People_with_a_tmdb_id_are_merged_across_spellings_and_scripts()
+    {
+        FilmCatalog catalog = new(
+            [
+                Film("The Mission", 1999, ["Hong Kong"], ["杜琪峯@25236"]),
+                Film("Election", 2005, ["Hong Kong"], ["Johnnie To@25236"]),
+                Film("Exiled", 2006, ["Hong Kong"], ["Johnnie To@25236"]),
+            ],
+            []);
+
+        PersonSummary to = Assert.Single(catalog.GetPeople(PersonRole.Director));
+        Assert.Equal("tmdb:25236", to.Key);
+        Assert.Equal("Johnnie To", to.Name);
+        Assert.Equal(3, to.FilmCount);
+    }
+
+    [Fact]
+    public void Homonyms_with_different_tmdb_ids_stay_apart()
+    {
+        FilmCatalog catalog = new([Film("A", 2000, directors: ["John Smith@1"]), Film("B", 2001, directors: ["John Smith@2"])], []);
+
+        Assert.Equal(2, catalog.GetPeople(PersonRole.Director).Count);
+    }
+
+    [Fact]
+    public void Credits_without_a_tmdb_id_borrow_the_one_their_name_leads_to()
+    {
+        FilmCatalog catalog = new([Film("A", 1960, directors: ["Jean-Luc Godard@3776"]), Film("B", 1961, directors: ["Jean-Luc Godard"])], []);
+
+        PersonSummary godard = Assert.Single(catalog.GetPeople(PersonRole.Director));
+        Assert.Equal(2, godard.FilmCount);
+        Assert.Equal("3776", godard.TmdbId);
+    }
+
+    [Fact]
+    public void Ambiguous_names_do_not_lend_a_tmdb_id()
+    {
+        FilmCatalog catalog = new(
+            [Film("A", directors: ["John Smith@1"]), Film("B", directors: ["John Smith@2"]), Film("C", directors: ["John Smith"])],
+            []);
+
+        Assert.Equal(3, catalog.GetPeople(PersonRole.Director).Count);
+    }
+
+    [Fact]
+    public void Filter_by_tmdb_key_finds_every_spelling()
+    {
+        FilmCatalog catalog = new([Film("The Mission", 1999, directors: ["杜琪峯@25236"]), Film("Election", 2005, directors: ["Johnnie To@25236"])], []);
+
+        Assert.Equal(2, catalog.Filter(new FilmFilter(Person: "tmdb:25236", Role: PersonRole.Director)).Count());
+    }
+
+    [Fact]
+    public void Filter_by_person_without_role_searches_every_role()
+    {
+        FilmCatalog catalog = new([Film("A", directors: ["Takeshi Kitano"]), Film("B", actors: ["Takeshi Kitano"])], []);
+
+        Assert.Equal(2, catalog.Filter(new FilmFilter(Person: "Takeshi Kitano")).Count());
+    }
+
+    [Theory]
+    [InlineData(new[] { "杜琪峯", "Johnnie To" }, "Johnnie To")]
+    [InlineData(new[] { "杜琪峯", "杜琪峯", "Johnnie To" }, "杜琪峯")]
+    public void ChooseName_prefers_the_most_frequent_then_latin_spelling(string[] names, string expected)
+        => Assert.Equal(expected, FilmCatalog.ChooseName(names));
 }

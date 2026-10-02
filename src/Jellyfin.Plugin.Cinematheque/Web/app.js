@@ -393,7 +393,7 @@
 
   function peopleView(kind) {
     return function (route) {
-      var endpoint = kind === 'director' ? 'Directors' : 'Actors';
+      var endpoint = 'People/' + kind + 's';
       var limit = Number(route.limit) || PAGE_SIZE;
       var params = { startIndex: 0, limit: limit, sortBy: route.sort || 'count' };
       if (route.q) {
@@ -446,7 +446,7 @@
 
         var list = page.Items.length
           ? h('ul', { class: 'cin-grid cin-grid-people' }, page.Items.map(function (person) {
-            return h('li', null, h('a', { class: 'cin-card cin-person', href: href({ view: kind, name: person.Name }) },
+            return h('li', null, h('a', { class: 'cin-card cin-person', href: href({ view: kind, person: person.Key, name: person.Name }) },
               image(person.Id, 300, '', initials(person.Name)),
               h('span', { class: 'cin-card-title', text: person.Name }),
               h('span', { class: 'cin-card-meta', text: [filmCount(person.FilmCount), years(person.FirstYear, person.LastYear)].filter(Boolean).join(' · ') }),
@@ -468,7 +468,8 @@
 
   function personView(kind) {
     return function (route) {
-      var filter = kind === 'director' ? { director: route.name } : { actor: route.name };
+      // Links carry the identity (tmdb:… or name:…); older links only have the name.
+      var filter = { person: route.person || route.name, role: kind + 's' };
       return filmsSection(route, filter).then(function (films) {
         return h('div', null,
           h('div', { class: 'cin-hero' },
@@ -534,8 +535,8 @@
           h('h2', { class: 'cin-hero-title', text: countryName(summary) })),
         summary.Directors.length ? h('div', { class: 'cin-related' },
           h('h3', { class: 'cin-subtitle', text: t('topDirectors') }),
-          h('div', { class: 'cin-chips' }, summary.Directors.map(function (name) {
-            return h('a', { class: 'cin-chip', href: href({ view: 'director', name: name }), text: name });
+          h('div', { class: 'cin-chips' }, summary.Directors.map(function (director) {
+            return h('a', { class: 'cin-chip', href: href({ view: 'director', person: director.Key, name: director.Name }), text: director.Name });
           }))) : null,
         results[1]);
     });

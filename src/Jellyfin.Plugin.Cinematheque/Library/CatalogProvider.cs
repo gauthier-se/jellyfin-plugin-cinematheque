@@ -47,6 +47,9 @@ public sealed class CatalogProvider : IDisposable
     private readonly IUserManager _userManager;
     private readonly ILogger<CatalogProvider> _logger;
     private readonly ConcurrentDictionary<Guid, Entry> _catalogs = new();
+
+    // Credited name to TMDB person id (null when the person has none), shared by every user.
+    private readonly ConcurrentDictionary<string, string?> _personTmdbIds = new(StringComparer.Ordinal);
     private long _libraryGeneration;
 
     /// <summary>
@@ -140,10 +143,23 @@ public sealed class CatalogProvider : IDisposable
         }
 
         int actorsPerFilm = Math.Max(1, configuration.ActorsPerFilm);
+        string[] CreditedNames(BaseItem item, PersonKind kind, int max = int.MaxValue)
+            => (people.GetValueOrDefault(item.Id) ?? [])
+                .Where(p => p.Type == kind && !string.IsNullOrWhiteSpace(p.Name))
+                .Select(p => p.Name)
+                .Take(max)
+                .ToArray();
+
+        var credited = items
+            .Select(item => (Item: item, Directors: CreditedNames(item, PersonKind.Director), Actors: CreditedNames(item, PersonKind.Actor, actorsPerFilm)))
+            .ToArray();
+        IReadOnlyDictionary<string, string> tmdbIds = ResolvePersonTmdbIds(
+            credited.SelectMany(c => c.Directors.Concat(c.Actors)).Distinct(StringComparer.Ordinal));
+        Credit[] Credits(string[] names) => names.Select(n => new Credit(n, tmdbIds.GetValueOrDefault(n))).ToArray();
+
         List<Film> films = new List<Film>(items.Count);
-        foreach (BaseItem item in items)
+        foreach ((BaseItem item, string[] directors, string[] actors) in credited)
         {
-            IReadOnlyList<PersonInfo> credits = people.GetValueOrDefault(item.Id) ?? [];
             films.Add(new Film(
                 item.Id,
                 item.Name ?? string.Empty,
@@ -153,8 +169,8 @@ public sealed class CatalogProvider : IDisposable
                 item.Genres ?? [],
                 item.Tags ?? [],
                 item.GetProviderId(MetadataProvider.Tmdb),
-                credits.Where(p => p.Type == PersonKind.Director).Select(p => p.Name).ToArray(),
-                credits.Where(p => p.Type == PersonKind.Actor).Select(p => p.Name).Take(actorsPerFilm).ToArray()));
+                Credits(directors),
+                Credits(actors)));
         }
 
         FilmCatalog catalog = new FilmCatalog(films, configuration.Movements ?? []);
@@ -166,9 +182,79 @@ public sealed class CatalogProvider : IDisposable
         return catalog;
     }
 
+    /// <summary>
+    /// Looks up the TMDB ids of credited people, from cache when possible.
+    /// </summary>
+    /// <param name="names">The credited names.</param>
+    /// <returns>The TMDB id of every name that has one.</returns>
+    private Dictionary<string, string> ResolvePersonTmdbIds(IEnumerable<string> names)
+    {
+        Dictionary<string, string> result = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        // Person items are keyed by a hash of their name, so the missing ones need no search.
+        Dictionary<Guid, List<string>> missing = [];
+        foreach (string name in names)
+        {
+            if (_personTmdbIds.TryGetValue(name, out string? cached))
+            {
+                if (cached is not null)
+                {
+                    result[name] = cached;
+                }
+
+                continue;
+            }
+
+            Guid id = _libraryManager.GetPersonId(name);
+            if (!missing.TryGetValue(id, out List<string>? sameId))
+            {
+                sameId = [];
+                missing[id] = sameId;
+            }
+
+            sameId.Add(name);
+        }
+
+        DtoOptions options = DtoOptions.StoredColumnsOnly;
+        options.Fields = [ItemFields.ProviderIds];
+        foreach (Guid[] batch in missing.Keys.Chunk(PeopleBatchSize))
+        {
+            foreach (BaseItem person in _libraryManager.GetItemList(new InternalItemsQuery
+            {
+                ItemIds = batch,
+                IncludeItemTypes = [BaseItemKind.Person],
+                DtoOptions = options,
+            }))
+            {
+                string? tmdbId = person.GetProviderId(MetadataProvider.Tmdb);
+                foreach (string name in missing.GetValueOrDefault(person.Id) ?? [])
+                {
+                    _personTmdbIds[name] = tmdbId;
+                    if (tmdbId is not null)
+                    {
+                        result[name] = tmdbId;
+                    }
+                }
+            }
+        }
+
+        // Remember people without an item too, until Jellyfin creates or updates one.
+        foreach (string name in missing.Values.SelectMany(n => n))
+        {
+            _personTmdbIds.TryAdd(name, null);
+        }
+
+        return result;
+    }
+
     private void OnLibraryChanged(object? sender, ItemChangeEventArgs e)
     {
-        if (e.Item is Movie)
+        if (e.Item is Person person)
+        {
+            _personTmdbIds.TryRemove(person.Name, out _);
+            Interlocked.Increment(ref _libraryGeneration);
+        }
+        else if (e.Item is Movie)
         {
             Interlocked.Increment(ref _libraryGeneration);
         }

@@ -6,20 +6,20 @@ using Jellyfin.Plugin.Cinematheque.Configuration;
 namespace Jellyfin.Plugin.Cinematheque.Catalog;
 
 /// <summary>
-/// An in-memory view of one user's films, indexed by director, actor, country and movement.
+/// An in-memory view of one user's films, indexed by person, country and movement.
 /// </summary>
 /// <remarks>
 /// The catalog is immutable once built, so one instance can serve concurrent requests. People are
-/// grouped by <see cref="Names.Key"/>, which merges spelling variants of the same name; the
-/// spelling shown is the one credited most often.
+/// grouped by <see cref="Credit.Key"/>: their TMDB id when known, their name otherwise. A credit
+/// without a TMDB id borrows one from another credit with the same name, as long as that name
+/// leads to a single TMDB person.
 /// </remarks>
 public sealed class FilmCatalog
 {
     private const int TopCountries = 3;
     private const int TopDirectors = 5;
 
-    private readonly Lazy<IReadOnlyList<PersonSummary>> _directors;
-    private readonly Lazy<IReadOnlyList<PersonSummary>> _actors;
+    private readonly Dictionary<PersonRole, Lazy<IReadOnlyList<PersonSummary>>> _people;
     private readonly Lazy<IReadOnlyList<CountrySummary>> _countries;
     private readonly IReadOnlyList<MovementMatcher> _movements;
     private readonly Lazy<IReadOnlyList<(MovementDefinition Movement, int FilmCount)>> _movementCounts;
@@ -34,13 +34,14 @@ public sealed class FilmCatalog
         ArgumentNullException.ThrowIfNull(films);
         ArgumentNullException.ThrowIfNull(movements);
 
-        Films = films.ToArray();
+        Films = ShareTmdbIds(films.ToArray());
         _movements = movements
             .Where(m => !string.IsNullOrWhiteSpace(m.Id))
             .Select(m => new MovementMatcher(m))
             .ToArray();
-        _directors = new Lazy<IReadOnlyList<PersonSummary>>(() => Summarize(f => f.Directors));
-        _actors = new Lazy<IReadOnlyList<PersonSummary>>(() => Summarize(f => f.Actors));
+        _people = Enum.GetValues<PersonRole>().ToDictionary(
+            role => role,
+            role => new Lazy<IReadOnlyList<PersonSummary>>(() => Summarize(role)));
         _countries = new Lazy<IReadOnlyList<CountrySummary>>(SummarizeCountries);
         _movementCounts = new Lazy<IReadOnlyList<(MovementDefinition Movement, int FilmCount)>>(
             () => _movements.Select(m => (m.Movement, Films.Count(m.Matches))).ToArray());
@@ -56,8 +57,7 @@ public sealed class FilmCatalog
     /// </summary>
     /// <param name="role">The role.</param>
     /// <returns>The people.</returns>
-    public IReadOnlyList<PersonSummary> GetPeople(PersonRole role)
-        => role == PersonRole.Director ? _directors.Value : _actors.Value;
+    public IReadOnlyList<PersonSummary> GetPeople(PersonRole role) => _people[role].Value;
 
     /// <summary>
     /// Lists the production countries, most represented first.
@@ -88,7 +88,7 @@ public sealed class FilmCatalog
     /// Lists the films that pass every filter that is set, oldest first.
     /// </summary>
     /// <param name="filter">The filter.</param>
-    /// <returns>The films, or nothing when the filter names an unknown movement.</returns>
+    /// <returns>The films, or nothing when the filter names an unknown movement or person.</returns>
     public IEnumerable<Film> Filter(FilmFilter filter)
     {
         ArgumentNullException.ThrowIfNull(filter);
@@ -100,16 +100,16 @@ public sealed class FilmCatalog
             films = films.Where(f => f.Countries.Any(c => string.Equals(c.Code, filter.Country, StringComparison.OrdinalIgnoreCase)));
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Director))
+        if (!string.IsNullOrWhiteSpace(filter.Person))
         {
-            string key = Names.Key(filter.Director);
-            films = films.Where(f => f.Directors.Any(d => Names.Key(d) == key));
-        }
+            PersonRef? person = PersonRef.Parse(filter.Person);
+            if (person is null)
+            {
+                return [];
+            }
 
-        if (!string.IsNullOrWhiteSpace(filter.Actor))
-        {
-            string key = Names.Key(filter.Actor);
-            films = films.Where(f => f.Actors.Any(a => Names.Key(a) == key));
+            PersonRole[] roles = filter.Role is PersonRole role ? [role] : Enum.GetValues<PersonRole>();
+            films = films.Where(f => roles.Any(r => f.GetCredits(r).Any(person.Matches)));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Movement))
@@ -133,6 +133,42 @@ public sealed class FilmCatalog
             .ThenBy(f => f.SortName, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Picks the name to show for a person credited under several spellings.
+    /// </summary>
+    /// <param name="names">Every credited spelling, one entry per credit.</param>
+    /// <returns>The most frequent spelling, preferring the Latin script on a tie.</returns>
+    internal static string ChooseName(IEnumerable<string> names)
+        => names
+            .GroupBy(n => n, StringComparer.Ordinal)
+            .OrderByDescending(g => g.Count())
+            .ThenByDescending(g => g.Key.Any(char.IsAsciiLetter))
+            .ThenBy(g => g.Key, StringComparer.Ordinal)
+            .First().Key;
+
+    private static Film[] ShareTmdbIds(Film[] films)
+    {
+        IEnumerable<Credit> AllCredits() => films.SelectMany(f => Enum.GetValues<PersonRole>().SelectMany(f.GetCredits));
+
+        // A name that leads to two TMDB people is a homonym: leave its credits alone.
+        Dictionary<string, string> idByName = AllCredits()
+            .Where(c => c.TmdbId is not null && c.NameKey.Length > 0)
+            .GroupBy(c => c.NameKey, StringComparer.Ordinal)
+            .Select(g => (g.Key, Ids: g.Select(c => c.TmdbId!).Distinct(StringComparer.Ordinal).ToArray()))
+            .Where(x => x.Ids.Length == 1)
+            .ToDictionary(x => x.Key, x => x.Ids[0], StringComparer.Ordinal);
+
+        if (!AllCredits().Any(c => c.TmdbId is null && idByName.ContainsKey(c.NameKey)))
+        {
+            return films;
+        }
+
+        IReadOnlyList<Credit> Fill(IReadOnlyList<Credit> credits)
+            => credits.Select(c => c.TmdbId is null && idByName.TryGetValue(c.NameKey, out string? id) ? c with { TmdbId = id } : c).ToArray();
+
+        return films.Select(f => f with { Directors = Fill(f.Directors), Actors = Fill(f.Actors) }).ToArray();
+    }
+
     private static IReadOnlyList<Country> MostFrequent(IEnumerable<Country> countries, int count)
         => countries
             .GroupBy(c => c.Code, StringComparer.Ordinal)
@@ -142,50 +178,29 @@ public sealed class FilmCatalog
             .Select(g => g.First())
             .ToArray();
 
-    private IReadOnlyList<PersonSummary> Summarize(Func<Film, IReadOnlyList<string>> credits)
-    {
-        Dictionary<string, List<(string Name, Film Film)>> byPerson = new Dictionary<string, List<(string Name, Film Film)>>(StringComparer.Ordinal);
-        foreach (Film film in Films)
-        {
-            // A person credited twice on the same film (co-director listed twice, say) counts once.
-            foreach (string name in credits(film).DistinctBy(Names.Key))
+    // A person credited twice on the same film (co-director listed twice, say) counts once.
+    private static IEnumerable<Credit> DistinctPeople(IEnumerable<Credit> credits)
+        => credits.Where(c => c.NameKey.Length > 0 || c.TmdbId is not null).DistinctBy(c => c.Key, StringComparer.Ordinal);
+
+    private IReadOnlyList<PersonSummary> Summarize(PersonRole role)
+        => Films
+            .SelectMany(f => DistinctPeople(f.GetCredits(role)).Select(c => (Credit: c, Film: f)))
+            .GroupBy(x => x.Credit.Key, StringComparer.Ordinal)
+            .Select(g =>
             {
-                string key = Names.Key(name);
-                if (key.Length == 0)
-                {
-                    continue;
-                }
-
-                if (!byPerson.TryGetValue(key, out List<(string Name, Film Film)>? entries))
-                {
-                    entries = [];
-                    byPerson[key] = entries;
-                }
-
-                entries.Add((name, film));
-            }
-        }
-
-        return byPerson.Values
-            .Select(entries =>
-            {
-                int[] years = entries.Where(e => e.Film.Year is not null).Select(e => e.Film.Year!.Value).ToArray();
-                string name = entries
-                    .GroupBy(e => e.Name, StringComparer.Ordinal)
-                    .OrderByDescending(g => g.Count())
-                    .ThenBy(g => g.Key, StringComparer.Ordinal)
-                    .First().Key;
+                int[] years = g.Where(x => x.Film.Year is not null).Select(x => x.Film.Year!.Value).ToArray();
                 return new PersonSummary(
-                    name,
-                    entries.Count,
+                    g.Key,
+                    g.First().Credit.TmdbId,
+                    ChooseName(g.Select(x => x.Credit.Name)),
+                    g.Count(),
                     years.Length > 0 ? years.Min() : null,
                     years.Length > 0 ? years.Max() : null,
-                    MostFrequent(entries.SelectMany(e => e.Film.Countries), TopCountries));
+                    MostFrequent(g.SelectMany(x => x.Film.Countries), TopCountries));
             })
             .OrderByDescending(p => p.FilmCount)
             .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-    }
 
     private IReadOnlyList<CountrySummary> SummarizeCountries()
         => Films
@@ -195,13 +210,12 @@ public sealed class FilmCatalog
                 g.First().Country,
                 g.Count(),
                 CountByDecade(g.Select(x => x.Film)),
-                g.SelectMany(x => x.Film.Directors.DistinctBy(Names.Key))
-                    .GroupBy(Names.Key, StringComparer.Ordinal)
-                    .Where(d => d.Key.Length > 0)
+                g.SelectMany(x => DistinctPeople(x.Film.Directors))
+                    .GroupBy(c => c.Key, StringComparer.Ordinal)
                     .OrderByDescending(d => d.Count())
-                    .ThenBy(d => d.First(), StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(d => d.First().Name, StringComparer.OrdinalIgnoreCase)
                     .Take(TopDirectors)
-                    .Select(d => d.First())
+                    .Select(d => new PersonLink(d.Key, ChooseName(d.Select(c => c.Name))))
                     .ToArray()))
             .OrderByDescending(c => c.FilmCount)
             .ThenBy(c => c.Country.Name, StringComparer.OrdinalIgnoreCase)

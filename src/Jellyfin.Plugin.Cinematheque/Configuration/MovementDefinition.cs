@@ -46,7 +46,8 @@ public class MovementDefinition
     public int? YearTo { get; set; }
 
     /// <summary>
-    /// Gets or sets the directors, any of whom qualifies.
+    /// Gets or sets the directors, any of whom qualifies: a name, <c>tmdb:25236</c>, or both as
+    /// <c>Johnnie To (tmdb:25236)</c>. See <see cref="Catalog.PersonRef"/>.
     /// </summary>
     public string[] Directors { get; set; } = [];
 

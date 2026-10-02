@@ -15,4 +15,4 @@ public sealed record CountrySummaryDto(
     string Name,
     int FilmCount,
     IReadOnlyList<DecadeDto> Decades,
-    IReadOnlyList<string> Directors);
+    IReadOnlyList<PersonLinkDto> Directors);

@@ -78,4 +78,13 @@ public class MovementMatcherTests
 
         Assert.False(matcher.Matches(Film("Film", 1955, ["France"])));
     }
+
+    [Fact]
+    public void Director_tmdb_references_match_credits_in_any_script()
+    {
+        MovementMatcher matcher = new(MovementDefinition.Create("hb", "Heroic Bloodshed", string.Empty, ["HK"], (1986, 1998), ["Johnnie To (tmdb:25236)"]));
+
+        Assert.True(matcher.Matches(Film("Lifeline", 1997, ["Hong Kong"], ["杜琪峯@25236"])));
+        Assert.True(matcher.Matches(Film("A Hero Never Dies", 1998, ["Hong Kong"], ["Johnnie To"])));
+    }
 }

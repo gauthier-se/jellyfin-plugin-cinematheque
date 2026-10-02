@@ -11,7 +11,7 @@ namespace Jellyfin.Plugin.Cinematheque.Catalog;
 public sealed class MovementMatcher
 {
     private readonly HashSet<string> _countries;
-    private readonly HashSet<string> _directors;
+    private readonly IReadOnlyList<PersonRef> _directors;
     private readonly HashSet<string> _genres;
     private readonly HashSet<string> _tags;
     private readonly HashSet<string> _tmdbIds;
@@ -30,7 +30,7 @@ public sealed class MovementMatcher
         Movement = movement;
         // Accept "FR" as well as "France" in the configuration.
         _countries = KeySet((movement.Countries ?? []).Select(c => Country.FromLocation(c)?.Code ?? string.Empty));
-        _directors = KeySet(movement.Directors);
+        _directors = (movement.Directors ?? []).Select(PersonRef.Parse).OfType<PersonRef>().ToArray();
         _genres = KeySet(movement.Genres);
         _tags = KeySet(movement.Tags);
         _tmdbIds = new HashSet<string>(
@@ -74,7 +74,7 @@ public sealed class MovementMatcher
         }
 
         return MatchesAny(_countries, film.Countries.Select(c => c.Code))
-            && MatchesAny(_directors, film.Directors)
+            && (_directors.Count == 0 || film.Directors.Any(credit => _directors.Any(director => director.Matches(credit))))
             && MatchesAny(_genres, film.Genres)
             && MatchesAny(_tags, film.Tags);
     }
