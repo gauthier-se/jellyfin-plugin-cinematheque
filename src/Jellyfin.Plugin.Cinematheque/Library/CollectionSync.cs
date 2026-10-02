@@ -12,6 +12,8 @@ using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Providers;
+using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Cinematheque.Library;
@@ -28,6 +30,8 @@ namespace Jellyfin.Plugin.Cinematheque.Library;
 /// rules, so films added to them by hand are removed on the next sync.</item>
 /// <item>Nothing is ever deleted. A hidden or removed movement keeps its collection as it was.</item>
 /// <item>An existing collection with the same name is left alone and the movement is skipped.</item>
+/// <item>Collections are locked. That keeps internet providers from renaming them, and it is what
+/// makes Jellyfin draw their poster as a collage of the films inside.</item>
 /// </list>
 /// </remarks>
 public sealed class CollectionSync : IDisposable
@@ -36,6 +40,8 @@ public sealed class CollectionSync : IDisposable
     private readonly ILibraryManager _libraryManager;
     private readonly ICollectionManager _collectionManager;
     private readonly IServerConfigurationManager _serverConfigurationManager;
+    private readonly IProviderManager _providerManager;
+    private readonly IFileSystem _fileSystem;
     private readonly ILogger<CollectionSync> _logger;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
@@ -46,18 +52,24 @@ public sealed class CollectionSync : IDisposable
     /// <param name="libraryManager">The library manager.</param>
     /// <param name="collectionManager">The collection manager.</param>
     /// <param name="serverConfigurationManager">The server configuration, for its display language.</param>
+    /// <param name="providerManager">The provider manager, to redraw collection posters.</param>
+    /// <param name="fileSystem">The file system.</param>
     /// <param name="logger">The logger.</param>
     public CollectionSync(
         CatalogProvider catalogProvider,
         ILibraryManager libraryManager,
         ICollectionManager collectionManager,
         IServerConfigurationManager serverConfigurationManager,
+        IProviderManager providerManager,
+        IFileSystem fileSystem,
         ILogger<CollectionSync> logger)
     {
         _catalogProvider = catalogProvider;
         _libraryManager = libraryManager;
         _collectionManager = collectionManager;
         _serverConfigurationManager = serverConfigurationManager;
+        _providerManager = providerManager;
+        _fileSystem = fileSystem;
         _logger = logger;
     }
 
@@ -165,6 +177,7 @@ public sealed class CollectionSync : IDisposable
         BoxSet collection = await _collectionManager.CreateCollectionAsync(new CollectionCreationOptions
         {
             Name = name,
+            IsLocked = true,
             ItemIdList = summary.FilmIds.Select(id => id.ToString("N")).ToArray(),
         }).ConfigureAwait(false);
         _logger.LogInformation("Created the {CollectionName} collection with {FilmCount} films", name, summary.FilmCount);
@@ -173,6 +186,17 @@ public sealed class CollectionSync : IDisposable
 
     private async Task UpdateAsync(BoxSet collection, MovementSummary summary)
     {
+        // Collections created before 0.2 were not locked, so Jellyfin never drew their poster.
+        if (!collection.IsLocked)
+        {
+            collection.IsLocked = true;
+            await collection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None).ConfigureAwait(false);
+            _providerManager.QueueRefresh(
+                collection.Id,
+                new MetadataRefreshOptions(new DirectoryService(_fileSystem)) { ImageRefreshMode = MetadataRefreshMode.FullRefresh },
+                RefreshPriority.Normal);
+        }
+
         HashSet<Guid> wanted = summary.FilmIds.ToHashSet();
         HashSet<Guid> current = collection.GetLinkedChildren(DtoOptions.StoredColumnsOnly).Select(item => item.Id).ToHashSet();
 
