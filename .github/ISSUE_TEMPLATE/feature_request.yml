@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest an idea or a new movement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: Describe the browsing need rather than a solution, for example "find every Shaw Brothers film".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Ideas
+      description: How it could work, screenshots of other tools, or a movement definition in JSON.

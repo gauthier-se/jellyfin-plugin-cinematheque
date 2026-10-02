@@ -1,0 +1,83 @@
+# Publishes a release when a version tag is pushed, for example v0.2.0.
+#
+# 1. Builds the plugin zip with jprm, Jellyfin's plugin packaging tool.
+# 2. Attaches it to a GitHub release.
+# 3. Adds it to manifest.json on the gh-pages branch, the plugin repository URL users
+#    add to Jellyfin: https://<owner>.github.io/<repo>/manifest.json
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install jprm
+        run: pip install jprm==1.1.0
+
+      - name: Resolve version
+        id: version
+        run: |
+          # Jellyfin plugin versions have four parts: v0.2.0 becomes 0.2.0.0.
+          version="${GITHUB_REF_NAME#v}"
+          while [ "$(echo "$version" | tr -cd '.' | wc -c)" -lt 3 ]; do version="$version.0"; done
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: dotnet test --configuration Release
+
+      - name: Package
+        id: package
+        run: |
+          mkdir -p artifacts
+          zip=$(jprm --verbosity=info plugin build . --output artifacts --version "${{ steps.version.outputs.version }}" --dotnet-framework net10.0)
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ steps.package.outputs.zip }}
+          generate_release_notes: true
+
+      - name: Update the plugin repository manifest
+        env:
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          if git fetch origin gh-pages; then
+            git worktree add pages origin/gh-pages
+            git -C pages switch -c gh-pages
+          else
+            git worktree add --detach pages
+            git -C pages switch --orphan gh-pages
+            jprm repo init pages
+          fi
+
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/$(basename "$ZIP")"
+          # With --plugin-url the zip stays on the release; the branch only carries the manifest.
+          jprm repo add --plugin-url "$url" pages "$ZIP"
+
+          git -C pages add -A
+          git -C pages commit -m "Release ${GITHUB_REF_NAME}"
+          git -C pages push origin gh-pages

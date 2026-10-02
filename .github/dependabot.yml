@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # Jellyfin.Controller and Jellyfin.Model follow the server release line on purpose:
+      # moving them is a compatibility decision, made together with targetAbi in build.yaml.
+      - dependency-name: Jellyfin.Controller
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: Jellyfin.Model
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: Newtonsoft.Json
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
