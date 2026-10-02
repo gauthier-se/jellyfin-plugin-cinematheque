@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+artifacts/
+*.zip
+
+# Test results
+TestResults/
+coverage/
+
+# IDE
+.vs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.user
+
+# OS
+.DS_Store
+
+# Nix
+result
+.direnv/
