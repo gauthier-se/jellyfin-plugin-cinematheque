@@ -175,7 +175,7 @@
         }
 
         function slug(text) {
-          return (text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+          return (text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
             .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
         }
 
@@ -387,7 +387,17 @@
 
         // ---------------------------------------------------------- events
 
+        // False until the settings load: saving an empty form would erase the movements.
+        var loaded = false;
+
+        function showError(message) {
+          error.textContent = message;
+          error.hidden = false;
+          error.scrollIntoView({ block: 'center' });
+        }
+
         function reload() {
+          loaded = false;
           Dashboard.showLoadingMsg();
           return Promise.all([
             ApiClient.getPluginConfiguration(pluginId),
@@ -399,6 +409,10 @@
             page.querySelector('#MinDirectorFilms').value = config.MinDirectorFilms;
             page.querySelector('#SyncCollections').checked = !!config.SyncCollections;
             load(config, results[1]);
+            loaded = true;
+          }).catch(function (err) {
+            console.error('Cinematheque:', err);
+            showError('The settings could not be loaded. Reload the page to try again.');
           }).finally(function () {
             Dashboard.hideLoadingMsg();
           });
@@ -423,8 +437,7 @@
               throw new Error('The JSON must be an array of movements.');
             }
           } catch (err) {
-            error.textContent = err.message;
-            error.hidden = false;
+            showError(err.message);
             return;
           }
 
@@ -446,11 +459,14 @@
         form.addEventListener('submit', function (e) {
           e.preventDefault();
 
+          if (!loaded) {
+            showError('The settings did not load, so saving now would erase your movements. Reload the page first.');
+            return false;
+          }
+
           var problem = validate();
           if (problem) {
-            error.textContent = problem;
-            error.hidden = false;
-            error.scrollIntoView({ block: 'center' });
+            showError(problem);
             return false;
           }
 
@@ -466,7 +482,11 @@
             return ApiClient.updatePluginConfiguration(pluginId, config);
           }).then(function (result) {
             Dashboard.processPluginConfigurationUpdateResult(result);
-            return reload();
+            reload();
+          }, function (err) {
+            console.error('Cinematheque:', err);
+            Dashboard.hideLoadingMsg();
+            showError('The settings could not be saved. Try again, or check the server log.');
           });
 
           return false;
