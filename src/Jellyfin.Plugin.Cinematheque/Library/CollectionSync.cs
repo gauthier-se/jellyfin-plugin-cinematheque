@@ -110,53 +110,85 @@ public sealed class CollectionSync : IDisposable
 
     private async Task SyncLockedAsync(Plugin plugin, IProgress<double> progress, CancellationToken cancellationToken)
     {
-        PluginConfiguration configuration = plugin.Configuration;
         string language = _serverConfigurationManager.Configuration.UICulture;
-        Dictionary<string, Guid> managed = (configuration.ManagedCollections ?? [])
+        Dictionary<string, Guid> managed = (plugin.Configuration.ManagedCollections ?? [])
             .Where(c => !string.IsNullOrWhiteSpace(c.MovementId))
             .GroupBy(c => c.MovementId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Last().CollectionId, StringComparer.OrdinalIgnoreCase);
-        bool created = false;
+        Dictionary<string, Guid> created = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
 
         IReadOnlyList<MovementSummary> movements = _catalogProvider.BuildServerCatalog().GetMovements();
-        for (int i = 0; i < movements.Count; i++)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            MovementSummary summary = movements[i];
-            string movementId = summary.Movement.Id;
-            BoxSet? collection = managed.TryGetValue(movementId, out Guid collectionId)
-                ? _libraryManager.GetItemById(collectionId) as BoxSet
-                : null;
+            for (int i = 0; i < movements.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                MovementSummary summary = movements[i];
+                try
+                {
+                    await SyncMovementAsync(summary, managed, created, language, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // One movement failing, on a broken poster say, must not hold back the others.
+                    _logger.LogError(ex, "Could not sync the collection of the {MovementId} movement", summary.Movement.Id);
+                }
 
+                progress.Report(100.0 * (i + 1) / movements.Count);
+            }
+        }
+        finally
+        {
+            // Saved even when the sync fails or is cancelled halfway: a collection created but not
+            // recorded would pass for someone else's on the next sync, and never be synced again.
+            if (created.Count > 0)
+            {
+                SaveManagedCollections(plugin, created);
+            }
+        }
+    }
+
+    // Reads the configuration again rather than reusing the one the sync started with: the
+    // administrator may have saved the settings meanwhile, which replaces the object.
+    private static void SaveManagedCollections(Plugin plugin, Dictionary<string, Guid> created)
+    {
+        PluginConfiguration configuration = plugin.Configuration;
+        configuration.ManagedCollections = (configuration.ManagedCollections ?? [])
+            .Where(c => !string.IsNullOrWhiteSpace(c.MovementId) && !created.ContainsKey(c.MovementId))
+            .Concat(created.Select(c => new MovementCollectionLink { MovementId = c.Key, CollectionId = c.Value }))
+            .ToArray();
+        plugin.SaveConfiguration();
+    }
+
+    private async Task SyncMovementAsync(
+        MovementSummary summary,
+        Dictionary<string, Guid> managed,
+        Dictionary<string, Guid> created,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        string movementId = summary.Movement.Id;
+        BoxSet? collection = managed.TryGetValue(movementId, out Guid collectionId)
+            ? _libraryManager.GetItemById(collectionId) as BoxSet
+            : null;
+
+        if (collection is null)
+        {
+            collection = await CreateAsync(summary, language).ConfigureAwait(false);
             if (collection is null)
             {
-                collection = await CreateAsync(summary, language).ConfigureAwait(false);
-                if (collection is not null)
-                {
-                    managed[movementId] = collection.Id;
-                    created = true;
-                }
-            }
-            else
-            {
-                await UpdateAsync(collection, summary).ConfigureAwait(false);
+                return;
             }
 
-            if (collection is not null)
-            {
-                await EnsurePosterAsync(collection, summary, cancellationToken).ConfigureAwait(false);
-            }
-
-            progress.Report(100.0 * (i + 1) / movements.Count);
+            // Recorded before the poster, which is the step most likely to fail.
+            created[movementId] = collection.Id;
         }
-
-        if (created)
+        else
         {
-            configuration.ManagedCollections = managed
-                .Select(m => new MovementCollectionLink { MovementId = m.Key, CollectionId = m.Value })
-                .ToArray();
-            plugin.SaveConfiguration();
+            await UpdateAsync(collection, summary, cancellationToken).ConfigureAwait(false);
         }
+
+        await EnsurePosterAsync(collection, summary, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<BoxSet?> CreateAsync(MovementSummary summary, string language)
@@ -193,13 +225,13 @@ public sealed class CollectionSync : IDisposable
         return collection;
     }
 
-    private async Task UpdateAsync(BoxSet collection, MovementSummary summary)
+    private async Task UpdateAsync(BoxSet collection, MovementSummary summary, CancellationToken cancellationToken)
     {
         // Collections created before 0.2 were not locked.
         if (!collection.IsLocked)
         {
             collection.IsLocked = true;
-            await collection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None).ConfigureAwait(false);
+            await collection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
         }
 
         HashSet<Guid> wanted = summary.FilmIds.ToHashSet();
