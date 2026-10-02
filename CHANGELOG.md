@@ -6,6 +6,8 @@ four-part plugin versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-02
+
 ### Changed
 
 - The tab's title and sections (Directors, Actors, Writers, Countries, Movements) sit in a
@@ -83,6 +85,7 @@ four-part plugin versioning.
 - Cinematheque tab in the modern and legacy web client layouts, through File Transformation.
 - English and French interface.
 
-[Unreleased]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/releases/tag/v0.1.0
