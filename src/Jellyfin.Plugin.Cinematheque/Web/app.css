@@ -1,18 +1,24 @@
 /*
- * Cinematheque styles. Colours derive from currentColor so the view follows whichever
- * Jellyfin theme is active, light or dark; only the accent is fixed, to Jellyfin blue.
+ * Cinematheque styles. Colours derive from currentColor and from the --jf-* variables
+ * jellyfin-web sets for its theme, so the view follows whichever theme is active, light or dark.
+ * The fallbacks are the default Dark theme's values.
  */
 
 .cinematheque-host > :not(#cinematheque-root) {
   display: none !important;
 }
 
-.cinematheque {
-  --cin-accent: #00a4dc;
+/* The page, and the toolbar the header moves to in the app bar of the modern layout. */
+.cinematheque,
+.cin-appbar {
+  --cin-accent: var(--jf-palette-primary-main, #00a4dc);
   --cin-line: color-mix(in srgb, currentColor 14%, transparent);
   --cin-fill: color-mix(in srgb, currentColor 6%, transparent);
   --cin-muted: color-mix(in srgb, currentColor 62%, transparent);
   --cin-gap: 1rem;
+}
+
+.cinematheque {
   box-sizing: border-box;
   padding: 1.5rem clamp(1rem, 3.5vw, 3rem) 4rem;
   min-height: calc(100vh - 4rem);
@@ -30,6 +36,7 @@
 }
 
 .cinematheque a:focus-visible,
+.cin-appbar a:focus-visible,
 .cinematheque button:focus-visible,
 .cinematheque .cin-input:focus-visible {
   outline: 2px solid var(--cin-accent);
@@ -38,44 +45,82 @@
 
 /* Header ---------------------------------------------------------------- */
 
+/* The title reads like a library's name in the header bar, and the sections like the
+   buttons next to it: MUI text buttons, with the theme's colours, shape and type. Both take
+   the header bar's text colour, which the page body dims. */
 .cin-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.75rem 2rem;
-  margin-bottom: 1.75rem;
-  border-bottom: 1px solid var(--cin-line);
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .cin-title {
   margin: 0;
-  font-size: 1.6rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  color: var(--jf-palette-text-primary, currentColor);
+  font-size: 1.5rem;
+  font-weight: 300;
+  line-height: 1.2;
 }
 
+/* On a narrow screen the sections scroll sideways rather than squeeze into each other. */
 .cin-tabs {
   display: flex;
   gap: 0.25rem;
+  max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
 }
 
 .cin-tab {
-  padding: 0.75rem 0.9rem;
-  border-bottom: 2px solid transparent;
-  color: var(--cin-muted) !important;
-  font-weight: 500;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-width: 64px;
+  padding: 6px 8px;
+  border-radius: var(--jf-shape-borderRadius, 4px);
+  color: var(--jf-palette-text-primary, currentColor) !important;
+  font: var(--jf-font-button, 500 0.875rem/1.75 "Noto Sans", sans-serif);
+  text-decoration: none;
   white-space: nowrap;
+  transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .cin-tab:hover {
-  color: inherit !important;
+  background-color: var(--jf-palette-action-hover, rgba(255, 255, 255, 0.08));
 }
 
 .cin-tab-active {
-  border-bottom-color: var(--cin-accent);
-  color: inherit !important;
+  color: var(--cin-accent) !important;
+}
+
+.cin-tab-active:hover {
+  background-color: color-mix(in srgb, var(--cin-accent) 8%, transparent);
+}
+
+.cin-tab-icon {
+  margin: 0 8px 0 -4px;
+  font-size: 20px;
+}
+
+/* In the app bar, the header is one row like a library's: the title where a library's name
+   sits, inside its menu button's padding, and the sections scrolling in the space left. */
+.cin-appbar .cin-header {
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
+.cin-appbar .cin-title {
+  flex: none;
+  padding: 8px 11px;
+}
+
+.cin-appbar .cin-tabs {
+  min-width: 0;
 }
 
 /* Toolbar and inputs ---------------------------------------------------- */

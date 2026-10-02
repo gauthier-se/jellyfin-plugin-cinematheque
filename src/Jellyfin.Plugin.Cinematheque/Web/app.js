@@ -293,6 +293,46 @@
     return document.querySelector('main') || document.querySelector('#indexPage:not(.hide)') || document.querySelector('.page:not(.hide)');
   }
 
+  // The modern layout's app bar is where library pages put their title and buttons, as a second
+  // toolbar. Ours goes there too, so it gets the bar's background, border and fixed position from
+  // whatever theme is active, and jellyfin-web makes room for it under the bar by itself. Legacy
+  // layouts have no such bar: the header stays at the top of the page.
+  var BAR_ID = 'cinematheque-bar';
+
+  function findToolbar() {
+    return document.querySelector('header.MuiAppBar-root > .MuiToolbar-root:not(#' + BAR_ID + ')');
+  }
+
+  // Puts the header in our toolbar, creating it as a shallow copy of jellyfin-web's own, which
+  // brings its classes: height, gutters and theme. False when there is no app bar.
+  function mountBar(content) {
+    var toolbar = findToolbar();
+    if (!toolbar) {
+      return false;
+    }
+
+    var bar = document.getElementById(BAR_ID);
+    if (!bar || bar.parentElement !== toolbar.parentElement) {
+      if (bar) {
+        bar.remove();
+      }
+
+      bar = toolbar.cloneNode(false);
+      bar.id = BAR_ID;
+      bar.classList.add('cin-appbar');
+      toolbar.parentElement.appendChild(bar);
+    }
+
+    bar.replaceChildren(content);
+    return true;
+  }
+
+  function isBarMissing() {
+    var toolbar = findToolbar();
+    var bar = document.getElementById(BAR_ID);
+    return Boolean(toolbar) && (!bar || bar.parentElement !== toolbar.parentElement);
+  }
+
   var renderedKey = null;
   var renderToken = 0;
 
@@ -315,6 +355,11 @@
 
     var key = renderKey();
     if (root && key === renderedKey && !force) {
+      // React may rebuild the app bar without the view changing: put the header back.
+      if (isBarMissing()) {
+        mountBar(header(readRoute()));
+      }
+
       return;
     }
 
@@ -328,7 +373,12 @@
     var token = ++renderToken;
     var route = readRoute();
 
-    root.replaceChildren(header(route));
+    var head = header(route);
+    root.replaceChildren();
+    if (!mountBar(head)) {
+      root.appendChild(head);
+    }
+
     var body = h('div', { class: 'cin-body' }, h('p', { class: 'cin-status', text: t('loading') }));
     root.appendChild(body);
 
@@ -346,10 +396,12 @@
   }
 
   function unmount() {
-    var root = document.getElementById(ROOT_ID);
-    if (root) {
-      root.remove();
-    }
+    [ROOT_ID, BAR_ID].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.remove();
+      }
+    });
 
     document.querySelectorAll('.' + ACTIVE_CLASS).forEach(function (el) { el.classList.remove(ACTIVE_CLASS); });
     renderedKey = null;
@@ -366,17 +418,33 @@
     movements: 'movements', movement: 'movements'
   };
 
+  var SECTION_ICONS = {
+    directors: 'videocam',
+    actors: 'theater_comedy',
+    writers: 'history_edu',
+    countries: 'public',
+    movements: 'auto_awesome'
+  };
+
+  // Sections look like the library buttons of jellyfin-web's header. They carry MUI's own class
+  // names too, so a custom theme that restyles those buttons restyles these with them.
+  var TAB_CLASS = 'cin-tab MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-sizeMedium MuiButton-textSizeMedium';
+
   function header(route) {
     var current = own(SECTION_OF, route.view) ? SECTION_OF[route.view] : 'directors';
-    return h('header', { class: 'cin-header' },
+    return h('div', { class: 'cin-header' },
       h('h1', { class: 'cin-title', text: t('title') }),
       h('nav', { class: 'cin-tabs', 'aria-label': t('title') }, SECTIONS.map(function (section) {
+        var active = section === current;
         return h('a', {
-          class: 'cin-tab' + (section === current ? ' cin-tab-active' : ''),
+          class: TAB_CLASS + (active
+            ? ' cin-tab-active MuiButton-textPrimary MuiButton-colorPrimary'
+            : ' MuiButton-textInherit MuiButton-colorInherit'),
           href: href({ view: section }),
-          'aria-current': section === current ? 'page' : null,
-          text: t(section)
-        });
+          'aria-current': active ? 'page' : null
+        },
+        h('span', { class: 'cin-tab-icon material-icons', 'aria-hidden': 'true', text: SECTION_ICONS[section] }),
+        t(section));
       })));
   }
 
