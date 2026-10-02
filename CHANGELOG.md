@@ -8,6 +8,10 @@ four-part plugin versioning.
 
 ### Changed
 
+- The tab's title and sections (Directors, Actors, Writers, Countries, Movements) sit in a
+  second row of Jellyfin's header, where a library shows its name and buttons, so they share
+  its background and border in any theme. The sections look like the header's library buttons,
+  with an icon each, and the whole tab takes the active theme's colours.
 - The library is read once for every user instead of once per user, and held in memory once.
 
 ### Removed
@@ -25,6 +29,11 @@ four-part plugin versioning.
 - When the configuration page fails to load the settings, saving no longer erases the added
   and edited movements. A failed save no longer leaves the page loading forever.
 - Names sort ignoring accents: Éric Rohmer comes among the E, not after Z.
+- The Cinematheque entry of the header shows as selected while the tab is open, in the
+  built-in themes too.
+- On a narrow screen, the sections scroll sideways instead of overlapping.
+- Searching people no longer loses the search box after the first pause in typing: the list
+  updates under it while you type.
 
 ### Security
 
