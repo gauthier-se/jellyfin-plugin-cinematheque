@@ -21,16 +21,6 @@ public class FilmQuery
     public string? Role { get; set; }
 
     /// <summary>
-    /// Gets or sets a director name. Deprecated: use <see cref="Person"/> and <see cref="Role"/>.
-    /// </summary>
-    public string? Director { get; set; }
-
-    /// <summary>
-    /// Gets or sets an actor name. Deprecated: use <see cref="Person"/> and <see cref="Role"/>.
-    /// </summary>
-    public string? Actor { get; set; }
-
-    /// <summary>
     /// Gets or sets a movement id.
     /// </summary>
     public string? Movement { get; set; }
