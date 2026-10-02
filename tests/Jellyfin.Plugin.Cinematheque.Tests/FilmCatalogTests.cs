@@ -242,4 +242,27 @@ public class FilmCatalogTests
     [Fact]
     public void FindPerson_returns_nothing_for_someone_else()
         => Assert.Null(_catalog.FindPerson(PersonRole.Director, "Agnès Varda"));
+
+    [Fact]
+    public void People_tied_on_film_count_are_sorted_ignoring_accents()
+    {
+        FilmCatalog catalog = new([
+            Film("Le Rayon vert", 1986, ["France"], ["Éric Rohmer"]),
+            Film("Hero", 2002, ["China"], ["Zhang Yimou"]),
+            Film("Cléo de 5 à 7", 1962, ["France"], ["Agnès Varda"]),
+        ], []);
+
+        Assert.Equal(["Agnès Varda", "Éric Rohmer", "Zhang Yimou"], [.. catalog.GetPeople(PersonRole.Director).Select(d => d.Name)]);
+    }
+
+    [Fact]
+    public void Name_search_ignores_accents_and_punctuation_in_every_spelling()
+    {
+        PersonSummary ozu = _catalog.GetPeople(PersonRole.Director).Single(d => d.NameKey == "yasujiroozu");
+
+        Assert.True(ozu.NameContains("ozu"));
+        Assert.True(ozu.NameContains("Yasujiro"));
+        Assert.True(ozu.NameContains("YASUJIRŌ"));
+        Assert.False(ozu.NameContains("Woo"));
+    }
 }

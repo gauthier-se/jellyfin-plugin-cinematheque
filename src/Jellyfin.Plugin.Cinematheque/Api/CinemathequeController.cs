@@ -91,7 +91,7 @@ public class CinemathequeController : ControllerBase
 
         if (string.Equals(sortBy, "name", StringComparison.OrdinalIgnoreCase))
         {
-            people = people.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+            people = people.OrderBy(p => p.NameKey, StringComparer.Ordinal).ThenBy(p => p.Name, StringComparer.Ordinal);
         }
 
         PersonSummary[] all = people.ToArray();

@@ -25,10 +25,19 @@ public sealed record PersonSummary(
     int? LastYear,
     IReadOnlyList<Country> Countries)
 {
+    // Computed once: every search compares them for every person.
+    private readonly string[] _spellingKeys = [.. Spellings.Select(Names.Key)];
+
     /// <summary>
     /// Gets the number of films in the library.
     /// </summary>
     public int FilmCount => FilmIds.Count;
+
+    /// <summary>
+    /// Gets the comparison key of the display name, which also sorts it: "Éric Rohmer" among the
+    /// E, not after Z. See <see cref="Names.Key"/>.
+    /// </summary>
+    public string NameKey { get; } = Names.Key(Name);
 
     /// <summary>
     /// Tells whether any spelling of the name contains a search text.
@@ -38,6 +47,6 @@ public sealed record PersonSummary(
     public bool NameContains(string search)
     {
         string key = Names.Key(search);
-        return Spellings.Any(s => Names.Key(s).Contains(key, StringComparison.Ordinal));
+        return _spellingKeys.Any(s => s.Contains(key, StringComparison.Ordinal));
     }
 }
