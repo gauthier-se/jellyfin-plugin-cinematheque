@@ -15,6 +15,7 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Plugins;
+using MediaBrowser.Model.Querying;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Cinematheque.Library;
@@ -117,12 +118,16 @@ public sealed class CatalogProvider : IDisposable
         Stopwatch stopwatch = Stopwatch.StartNew();
         PluginConfiguration configuration = Configuration;
 
+        // Provider ids are a joined table that Jellyfin only loads when asked; images and user
+        // data are left out, since every joined table multiplies the rows returned.
+        DtoOptions options = DtoOptions.StoredColumnsOnly;
+        options.Fields = [ItemFields.ProviderIds];
         IReadOnlyList<BaseItem> items = _libraryManager.GetItemList(new InternalItemsQuery(user)
         {
             IncludeItemTypes = [BaseItemKind.Movie],
             Recursive = true,
             IsVirtualItem = false,
-            DtoOptions = new DtoOptions(false),
+            DtoOptions = options,
         });
 
         Dictionary<Guid, IReadOnlyList<PersonInfo>> people = new Dictionary<Guid, IReadOnlyList<PersonInfo>>(items.Count);
