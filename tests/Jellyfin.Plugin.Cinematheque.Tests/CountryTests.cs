@@ -39,6 +39,16 @@ public class CountryTests
         Assert.Equal("Republic of Somewhere", country.Name);
     }
 
+    [Fact]
+    public void FromLocation_keeps_non_latin_unknown_names_apart()
+    {
+        Country first = Country.FromLocation("香港特別行政區")!;
+        Country second = Country.FromLocation("中華民國")!;
+
+        Assert.NotEmpty(first.Code);
+        Assert.NotEqual(first.Code, second.Code);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

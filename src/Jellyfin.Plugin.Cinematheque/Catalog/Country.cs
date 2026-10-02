@@ -174,8 +174,10 @@ public sealed record Country(string Code, string Name)
             return country;
         }
 
+        // Names in non-Latin scripts have no ASCII slug; their comparison key is still unique.
         string name = location!.Trim();
-        return new Country(Names.Slug(name), name);
+        string slug = Names.Slug(name);
+        return new Country(slug.Length > 0 ? slug : key, name);
     }
 
     /// <summary>

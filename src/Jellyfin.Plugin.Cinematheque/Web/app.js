@@ -155,6 +155,11 @@
     }
   }
 
+  // Route values come from the URL, so never let them reach Object.prototype.
+  function own(object, key) {
+    return Object.prototype.hasOwnProperty.call(object, key);
+  }
+
   function initials(name) {
     return name.split(/\s+/).filter(Boolean).slice(0, 2).map(function (part) { return part[0]; }).join('').toUpperCase();
   }
@@ -177,7 +182,7 @@
   function readRoute() {
     var query = location.hash.split('?')[1] || '';
     var params = new URLSearchParams(query);
-    var route = {};
+    var route = Object.create(null);
     params.forEach(function (value, key) { route[key] = value; });
     route.view = route.cinematheque || 'directors';
     return route;
@@ -210,18 +215,23 @@
 
   // ---------------------------------------------------------------- API
 
-  var cache = {};
+  // Short-lived, so a long-open tab still picks up library changes.
+  var CACHE_MS = 5 * 60 * 1000;
+  var cache = new Map();
 
   function api(path, params) {
     var url = ApiClient.getUrl('Cinematheque/' + path, params || {});
-    if (!cache[url]) {
-      cache[url] = ApiClient.getJSON(url).catch(function (err) {
-        delete cache[url];
-        throw err;
-      });
+    var hit = cache.get(url);
+    if (hit && Date.now() - hit.time < CACHE_MS) {
+      return hit.promise;
     }
 
-    return cache[url];
+    var promise = ApiClient.getJSON(url).catch(function (err) {
+      cache.delete(url);
+      throw err;
+    });
+    cache.set(url, { time: Date.now(), promise: promise });
+    return promise;
   }
 
   // ---------------------------------------------------------------- host
@@ -265,7 +275,7 @@
     var body = h('div', { class: 'cin-body' }, h('p', { class: 'cin-status', text: t('loading') }));
     root.appendChild(body);
 
-    var view = VIEWS[route.view] || VIEWS.directors;
+    var view = own(VIEWS, route.view) ? VIEWS[route.view] : VIEWS.directors;
     Promise.resolve(view(route)).then(function (content) {
       if (token === renderToken) {
         body.replaceChildren(content);
@@ -294,7 +304,7 @@
   var SECTION_OF = { directors: 'directors', director: 'directors', actors: 'actors', actor: 'actors', countries: 'countries', country: 'countries', movements: 'movements', movement: 'movements' };
 
   function header(route) {
-    var current = SECTION_OF[route.view] || 'directors';
+    var current = own(SECTION_OF, route.view) ? SECTION_OF[route.view] : 'directors';
     return h('header', { class: 'cin-header' },
       h('h1', { class: 'cin-title', text: t('title') }),
       h('nav', { class: 'cin-tabs', 'aria-label': t('title') }, SECTIONS.map(function (section) {

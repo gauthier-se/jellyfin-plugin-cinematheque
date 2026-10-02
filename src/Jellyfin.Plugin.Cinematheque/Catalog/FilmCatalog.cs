@@ -22,6 +22,7 @@ public sealed class FilmCatalog
     private readonly Lazy<IReadOnlyList<PersonSummary>> _actors;
     private readonly Lazy<IReadOnlyList<CountrySummary>> _countries;
     private readonly IReadOnlyList<MovementMatcher> _movements;
+    private readonly Lazy<IReadOnlyList<(MovementDefinition Movement, int FilmCount)>> _movementCounts;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FilmCatalog"/> class.
@@ -41,6 +42,8 @@ public sealed class FilmCatalog
         _directors = new Lazy<IReadOnlyList<PersonSummary>>(() => Summarize(f => f.Directors));
         _actors = new Lazy<IReadOnlyList<PersonSummary>>(() => Summarize(f => f.Actors));
         _countries = new Lazy<IReadOnlyList<CountrySummary>>(SummarizeCountries);
+        _movementCounts = new Lazy<IReadOnlyList<(MovementDefinition Movement, int FilmCount)>>(
+            () => _movements.Select(m => (m.Movement, Films.Count(m.Matches))).ToArray());
     }
 
     /// <summary>
@@ -66,8 +69,20 @@ public sealed class FilmCatalog
     /// Lists the configured movements with the number of films each one matches.
     /// </summary>
     /// <returns>The movements, in configuration order.</returns>
-    public IReadOnlyList<(MovementDefinition Movement, int FilmCount)> GetMovements()
-        => _movements.Select(m => (m.Movement, Films.Count(m.Matches))).ToArray();
+    public IReadOnlyList<(MovementDefinition Movement, int FilmCount)> GetMovements() => _movementCounts.Value;
+
+    /// <summary>
+    /// Counts films per decade, oldest first. Films without a year are left out.
+    /// </summary>
+    /// <param name="films">The films.</param>
+    /// <returns>The decades that have at least one film.</returns>
+    public static IReadOnlyList<DecadeCount> CountByDecade(IEnumerable<Film> films)
+        => films
+            .Where(f => f.Decade is not null)
+            .GroupBy(f => f.Decade!.Value)
+            .OrderBy(g => g.Key)
+            .Select(g => new DecadeCount(g.Key, g.Count()))
+            .ToArray();
 
     /// <summary>
     /// Lists the films that pass every filter that is set, oldest first.
@@ -179,11 +194,7 @@ public sealed class FilmCatalog
             .Select(g => new CountrySummary(
                 g.First().Country,
                 g.Count(),
-                g.Where(x => x.Film.Decade is not null)
-                    .GroupBy(x => x.Film.Decade!.Value)
-                    .OrderBy(d => d.Key)
-                    .Select(d => new DecadeCount(d.Key, d.Count()))
-                    .ToArray(),
+                CountByDecade(g.Select(x => x.Film)),
                 g.SelectMany(x => x.Film.Directors.DistinctBy(Names.Key))
                     .GroupBy(Names.Key, StringComparer.Ordinal)
                     .Where(d => d.Key.Length > 0)

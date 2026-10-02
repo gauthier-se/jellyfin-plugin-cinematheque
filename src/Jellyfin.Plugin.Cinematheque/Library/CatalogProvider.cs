@@ -5,13 +5,16 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using Jellyfin.Data.Enums;
+using Jellyfin.Data.Events;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.Cinematheque.Catalog;
 using Jellyfin.Plugin.Cinematheque.Configuration;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Plugins;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Cinematheque.Library;
@@ -21,9 +24,15 @@ namespace Jellyfin.Plugin.Cinematheque.Library;
 /// </summary>
 /// <remarks>
 /// The catalog is built from the films the user can see, so library access and parental controls
-/// apply as they do everywhere else in Jellyfin. Any library or configuration change drops every
-/// cached catalog; the next request rebuilds it. A library scan raises many changes in a row, which
-/// is cheap: dropping the cache costs nothing and nobody rebuilds until someone browses.
+/// apply as they do everywhere else in Jellyfin.
+/// <list type="bullet">
+/// <item>A change to a user (library access, parental rating) drops that user's catalog at once,
+/// so a revoked library never lingers.</item>
+/// <item>A configuration change drops every catalog at once.</item>
+/// <item>A library change marks every catalog stale. A library scan raises thousands of changes,
+/// so a stale catalog keeps being served until it is <see cref="MinRebuildInterval"/> old: at
+/// most one rebuild per user per interval while a scan runs.</item>
+/// </list>
 /// </remarks>
 public sealed class CatalogProvider : IDisposable
 {
@@ -31,23 +40,30 @@ public sealed class CatalogProvider : IDisposable
     // parameter limit.
     private const int PeopleBatchSize = 500;
 
+    private static readonly TimeSpan MinRebuildInterval = TimeSpan.FromSeconds(30);
+
     private readonly ILibraryManager _libraryManager;
+    private readonly IUserManager _userManager;
     private readonly ILogger<CatalogProvider> _logger;
-    private readonly ConcurrentDictionary<Guid, Lazy<FilmCatalog>> _catalogs = new();
+    private readonly ConcurrentDictionary<Guid, Entry> _catalogs = new();
+    private long _libraryGeneration;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CatalogProvider"/> class.
     /// </summary>
     /// <param name="libraryManager">The library manager.</param>
+    /// <param name="userManager">The user manager.</param>
     /// <param name="logger">The logger.</param>
-    public CatalogProvider(ILibraryManager libraryManager, ILogger<CatalogProvider> logger)
+    public CatalogProvider(ILibraryManager libraryManager, IUserManager userManager, ILogger<CatalogProvider> logger)
     {
         _libraryManager = libraryManager;
+        _userManager = userManager;
         _logger = logger;
 
         _libraryManager.ItemAdded += OnLibraryChanged;
         _libraryManager.ItemUpdated += OnLibraryChanged;
         _libraryManager.ItemRemoved += OnLibraryChanged;
+        _userManager.OnUserUpdated += OnUserUpdated;
         if (Plugin.Instance is not null)
         {
             Plugin.Instance.ConfigurationChanged += OnConfigurationChanged;
@@ -65,10 +81,22 @@ public sealed class CatalogProvider : IDisposable
     {
         ArgumentNullException.ThrowIfNull(user);
 
-        // Lazy makes concurrent first requests for the same user share one build.
-        return _catalogs
-            .GetOrAdd(user.Id, _ => new Lazy<FilmCatalog>(() => Build(user), LazyThreadSafetyMode.ExecutionAndPublication))
-            .Value;
+        long generation = Interlocked.Read(ref _libraryGeneration);
+        Entry entry = _catalogs.AddOrUpdate(
+            user.Id,
+            _ => new Entry(() => Build(user), generation),
+            (_, existing) => existing.IsUsable(generation) ? existing : new Entry(() => Build(user), generation));
+
+        try
+        {
+            return entry.Catalog.Value;
+        }
+        catch
+        {
+            // Lazy caches exceptions: forget the failed build so the next request retries.
+            _catalogs.TryRemove(KeyValuePair.Create(user.Id, entry));
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -77,6 +105,7 @@ public sealed class CatalogProvider : IDisposable
         _libraryManager.ItemAdded -= OnLibraryChanged;
         _libraryManager.ItemUpdated -= OnLibraryChanged;
         _libraryManager.ItemRemoved -= OnLibraryChanged;
+        _userManager.OnUserUpdated -= OnUserUpdated;
         if (Plugin.Instance is not null)
         {
             Plugin.Instance.ConfigurationChanged -= OnConfigurationChanged;
@@ -124,9 +153,9 @@ public sealed class CatalogProvider : IDisposable
         }
 
         FilmCatalog catalog = new FilmCatalog(films, configuration.Movements ?? []);
-        _logger.LogInformation(
-            "Built the Cinematheque catalog for {UserName}: {FilmCount} films in {ElapsedMilliseconds} ms",
-            user.Username,
+        _logger.LogDebug(
+            "Built the Cinematheque catalog for user {UserId}: {FilmCount} films in {ElapsedMilliseconds} ms",
+            user.Id,
             films.Count,
             stopwatch.ElapsedMilliseconds);
         return catalog;
@@ -134,12 +163,34 @@ public sealed class CatalogProvider : IDisposable
 
     private void OnLibraryChanged(object? sender, ItemChangeEventArgs e)
     {
-        if (e.Item is MediaBrowser.Controller.Entities.Movies.Movie or Person)
+        if (e.Item is Movie)
         {
-            _catalogs.Clear();
+            Interlocked.Increment(ref _libraryGeneration);
         }
     }
 
-    private void OnConfigurationChanged(object? sender, MediaBrowser.Model.Plugins.BasePluginConfiguration e)
+    private void OnUserUpdated(object? sender, GenericEventArgs<User> e)
+        => _catalogs.TryRemove(e.Argument.Id, out _);
+
+    private void OnConfigurationChanged(object? sender, BasePluginConfiguration e)
         => _catalogs.Clear();
+
+    private sealed class Entry
+    {
+        private readonly long _createdAt = Environment.TickCount64;
+
+        public Entry(Func<FilmCatalog> build, long generation)
+        {
+            Catalog = new Lazy<FilmCatalog>(build, LazyThreadSafetyMode.ExecutionAndPublication);
+            Generation = generation;
+        }
+
+        public Lazy<FilmCatalog> Catalog { get; }
+
+        public long Generation { get; }
+
+        public bool IsUsable(long currentGeneration)
+            => Generation == currentGeneration
+                || Environment.TickCount64 - _createdAt < (long)MinRebuildInterval.TotalMilliseconds;
+    }
 }

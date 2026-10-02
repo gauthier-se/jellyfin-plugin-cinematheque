@@ -121,4 +121,12 @@ public class FilmCatalogTests
         Assert.Equal(3, movements.Single(m => m.Movement.Id == "heroic-bloodshed").FilmCount);
         Assert.Equal(1, movements.Single(m => m.Movement.Id == "hong-kong-new-wave").FilmCount);
     }
+
+    [Fact]
+    public void CountByDecade_skips_films_without_a_year()
+    {
+        var decades = FilmCatalog.CountByDecade([Film("A", 1961), Film("B", 1969), Film("C"), Film("D", 1970)]);
+
+        Assert.Equal([new DecadeCount(1960, 2), new DecadeCount(1970, 1)], decades);
+    }
 }

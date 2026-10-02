@@ -177,12 +177,7 @@ public class CinemathequeController : ControllerBase
 
         // Decades are computed before the decade filter so the client can switch between them.
         Film[] unfiltered = catalog.Filter(new FilmFilter(country, director, actor, movement)).ToArray();
-        DecadeDto[] decades = unfiltered
-            .Where(f => f.Decade is not null)
-            .GroupBy(f => f.Decade!.Value)
-            .OrderBy(g => g.Key)
-            .Select(g => new DecadeDto(g.Key, g.Count()))
-            .ToArray();
+        DecadeDto[] decades = FilmCatalog.CountByDecade(unfiltered).Select(d => new DecadeDto(d.Decade, d.FilmCount)).ToArray();
         Film[] films = decade is null ? unfiltered : unfiltered.Where(f => f.Decade == decade).ToArray();
 
         return Ok(new FilmPageDto(

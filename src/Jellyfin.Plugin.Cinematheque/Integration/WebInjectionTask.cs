@@ -60,7 +60,7 @@ public class WebInjectionTask : IScheduledTask, IConfigurableScheduledTask
     {
         Assembly? fileTransformation = AssemblyLoadContext.All
             .SelectMany(context => context.Assemblies)
-            .FirstOrDefault(assembly => assembly.FullName?.Contains(".FileTransformation", StringComparison.Ordinal) ?? false);
+            .FirstOrDefault(assembly => string.Equals(assembly.GetName().Name, "Jellyfin.Plugin.FileTransformation", StringComparison.Ordinal));
 
         MethodInfo? register = fileTransformation?
             .GetType("Jellyfin.Plugin.FileTransformation.PluginInterface")?

@@ -21,9 +21,9 @@ public class WebAssetsController : ControllerBase
 {
     private static readonly FrozenDictionary<string, string> _assets = new Dictionary<string, string>
     {
-        ["loader.js"] = "text/javascript",
-        ["app.js"] = "text/javascript",
-        ["app.css"] = "text/css",
+        ["loader.js"] = "text/javascript; charset=utf-8",
+        ["app.js"] = "text/javascript; charset=utf-8",
+        ["app.css"] = "text/css; charset=utf-8",
     }.ToFrozenDictionary();
 
     /// <summary>
