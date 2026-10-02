@@ -261,12 +261,17 @@
           var summary = summaryOf(entry);
           var m = entry.value;
 
+          var restore = null;
+
           // Update the summary in place so typing does not collapse the card.
           function refresh() {
             var next = summaryOf(entry);
             details.replaceChild(next, summary);
             summary = next;
             details.setAttribute('data-hidden', entry.hidden ? 'true' : 'false');
+            if (restore) {
+              restore.hidden = !isModified(entry);
+            }
           }
 
           var actions = h('div', { class: 'cin-actions' });
@@ -275,12 +280,12 @@
               type: 'button', class: 'raised emby-button',
               onclick: function () { entry.hidden = !entry.hidden; render(entries.indexOf(entry)); }
             }, h('span', { text: entry.hidden ? 'Show in the tab' : 'Hide from the tab' })));
-            if (isModified(entry)) {
-              actions.appendChild(h('button', {
-                type: 'button', class: 'raised emby-button',
-                onclick: function () { entry.value = clone(entry.builtIn); render(entries.indexOf(entry)); }
-              }, h('span', { text: 'Restore the built-in version' })));
-            }
+            restore = h('button', {
+              type: 'button', class: 'raised emby-button',
+              onclick: function () { entry.value = clone(entry.builtIn); render(entries.indexOf(entry)); }
+            }, h('span', { text: 'Restore the built-in version' }));
+            restore.hidden = !isModified(entry);
+            actions.appendChild(restore);
           } else {
             actions.appendChild(h('button', {
               type: 'button', class: 'raised emby-button',
