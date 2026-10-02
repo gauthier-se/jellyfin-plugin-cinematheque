@@ -9,6 +9,14 @@
         "imageUrl": "https://raw.githubusercontent.com/gauthier-se/jellyfin-plugin-cinematheque/main/docs/brand/logo.png",
         "versions": [
             {
+                "version": "0.3.0.0",
+                "changelog": "Fixes a web cache that showed one user's lists to the next on a shared browser, lists that stopped at 480 items, collections left out of sync, and a configuration page that could erase movements. The library is read once for every user, and the tab sits in Jellyfin's header. Removes the 0.1 Directors and Actors endpoints. See CHANGELOG.md.\n",
+                "targetAbi": "12.1.0.0",
+                "sourceUrl": "https://github.com/gauthier-se/jellyfin-plugin-cinematheque/releases/download/v0.3.0/cinematheque_0.3.0.0.zip",
+                "checksum": "a594b77731789bd43d43f076befb7d44",
+                "timestamp": "2026-10-02T17:13:18Z"
+            },
+            {
                 "version": "0.2.0.0",
                 "changelog": "People identified by TMDB id, screenwriters, watch progress, \"pick a film for me\", primary-country view, translated movements edited in a form, optional movement collections with posters, and a tile in My Media. See CHANGELOG.md.\n",
                 "targetAbi": "12.1.0.0",
