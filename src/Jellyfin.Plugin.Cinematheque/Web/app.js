@@ -227,14 +227,8 @@
     return '#/home?' + params.toString();
   }
 
-  function navigate(route, replace) {
-    var target = href(route);
-    if (replace) {
-      history.replaceState(history.state, '', target);
-      render(true);
-    } else {
-      location.hash = target.slice(1);
-    }
+  function navigate(route) {
+    location.hash = href(route).slice(1);
   }
 
   // Records a change that is already on screen, such as a longer list, so the back button
@@ -593,18 +587,9 @@
   function peopleView(kind) {
     return function (route) {
       var endpoint = 'People/' + kind + 's';
-      var params = { sortBy: route.sort || 'count' };
-      if (route.q) {
-        params.search = route.q;
-      }
-
-      if (route.min) {
-        params.minFilms = route.min;
-      }
-
-      function fetchPage(startIndex) {
-        return api(endpoint, Object.assign({ startIndex: startIndex, limit: PAGE_SIZE }, params));
-      }
+      var current = route;
+      var section = h('div');
+      var listToken = 0;
 
       // Name, then one line of what matters most; years and countries live on their page.
       function personCard(person) {
@@ -615,59 +600,79 @@
           h('span', { class: 'cin-card-meta', text: meta })));
       }
 
-      // The URL keeps how far the list was opened, so coming back from a person restores it.
-      return fetchList(fetchPage, Number(route.limit) || PAGE_SIZE).then(function (page) {
-        var search = h('input', {
-          class: 'cin-input',
-          type: 'search',
-          placeholder: t('search'),
-          'aria-label': t('search'),
-          value: route.q || ''
+      // Fills the list below the toolbar, leaving the toolbar alone: typing a search must not
+      // replace the box being typed in. The URL keeps how far the list was opened, so coming back
+      // from a person restores it.
+      function loadList(r) {
+        var token = ++listToken;
+        var params = { sortBy: r.sort || 'count' };
+        if (r.q) {
+          params.search = r.q;
+        }
+
+        if (r.min) {
+          params.minFilms = r.min;
+        }
+
+        function fetchPage(startIndex) {
+          return api(endpoint, Object.assign({ startIndex: startIndex, limit: PAGE_SIZE }, params));
+        }
+
+        return fetchList(fetchPage, Number(r.limit) || PAGE_SIZE).then(function (page) {
+          // A slower answer for an earlier search must not replace a newer one.
+          if (token !== listToken) {
+            return;
+          }
+
+          var list = page.Items.length
+            ? h('ul', { class: 'cin-grid cin-grid-people' }, page.Items.map(personCard))
+            : empty();
+          var more = moreButton(list, page, fetchPage, personCard, function (shown) {
+            remember(Object.assign({}, r, { limit: shown }));
+          });
+          section.replaceChildren(list);
+          append(section, more);
         });
-        var debounce;
-        search.addEventListener('input', function () {
-          clearTimeout(debounce);
-          debounce = setTimeout(function () {
-            navigate(Object.assign({}, route, { q: search.value, limit: null }), true);
-            var again = document.querySelector('#' + ROOT_ID + ' .cin-input');
-            if (again) {
-              again.focus();
-              again.setSelectionRange(again.value.length, again.value.length);
-            }
-          }, 300);
-        });
+      }
 
-        var sort = h('select', {
-          class: 'cin-input',
-          'aria-label': t('sortCount'),
-          onchange: function (e) { navigate(Object.assign({}, route, { sort: e.target.value, limit: null })); }
-        },
-        h('option', { value: 'count', text: t('sortCount'), selected: route.sort !== 'name' }),
-        h('option', { value: 'name', text: t('sortName'), selected: route.sort === 'name' }));
+      var search = h('input', {
+        class: 'cin-input',
+        type: 'search',
+        placeholder: t('search'),
+        'aria-label': t('search'),
+        value: route.q || ''
+      });
+      var debounce;
+      search.addEventListener('input', function () {
+        clearTimeout(debounce);
+        debounce = setTimeout(function () {
+          current = Object.assign({}, current, { q: search.value, limit: null });
+          remember(current);
+          loadList(current).catch(function (err) { console.error('Cinematheque:', err); });
+        }, 300);
+      });
 
-        var currentMin = route.min || '';
-        var min = h('select', {
-          class: 'cin-input',
-          'aria-label': t('minimum'),
-          onchange: function (e) { navigate(Object.assign({}, route, { min: e.target.value, limit: null })); }
-        },
-        h('option', { value: '', text: t('defaultMin'), selected: currentMin === '' }),
-        [1, 2, 3, 5, 10].map(function (n) {
-          return h('option', { value: String(n), text: n === 1 ? t('minFilm') : t('minFilms', n), selected: currentMin === String(n) });
-        }));
+      var sort = h('select', {
+        class: 'cin-input',
+        'aria-label': t('sortCount'),
+        onchange: function (e) { navigate(Object.assign({}, current, { sort: e.target.value, limit: null })); }
+      },
+      h('option', { value: 'count', text: t('sortCount'), selected: route.sort !== 'name' }),
+      h('option', { value: 'name', text: t('sortName'), selected: route.sort === 'name' }));
 
-        var list = page.Items.length
-          ? h('ul', { class: 'cin-grid cin-grid-people' }, page.Items.map(personCard))
-          : empty();
+      var currentMin = route.min || '';
+      var min = h('select', {
+        class: 'cin-input',
+        'aria-label': t('minimum'),
+        onchange: function (e) { navigate(Object.assign({}, current, { min: e.target.value, limit: null })); }
+      },
+      h('option', { value: '', text: t('defaultMin'), selected: currentMin === '' }),
+      [1, 2, 3, 5, 10].map(function (n) {
+        return h('option', { value: String(n), text: n === 1 ? t('minFilm') : t('minFilms', n), selected: currentMin === String(n) });
+      }));
 
-        var more = moreButton(list, page, fetchPage, personCard, function (shown) {
-          remember(Object.assign({}, route, { limit: shown }));
-        });
-
-        return h('div', null,
-          h('div', { class: 'cin-toolbar' }, search, sort, min),
-          list,
-          more);
+      return loadList(route).then(function () {
+        return h('div', null, h('div', { class: 'cin-toolbar' }, search, sort, min), section);
       });
     };
   }
