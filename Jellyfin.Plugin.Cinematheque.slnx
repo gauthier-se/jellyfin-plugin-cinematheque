@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Jellyfin.Plugin.Cinematheque/Jellyfin.Plugin.Cinematheque.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Jellyfin.Plugin.Cinematheque.Tests/Jellyfin.Plugin.Cinematheque.Tests.csproj" />
+  </Folder>
+</Solution>

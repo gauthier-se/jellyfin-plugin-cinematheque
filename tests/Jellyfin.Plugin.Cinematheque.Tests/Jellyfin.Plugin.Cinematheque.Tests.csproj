@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <AnalysisMode>Default</AnalysisMode>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Test names describe behaviour with underscores; xUnit needs public test classes. -->
+    <NoWarn>$(NoWarn);CA1707;CA1515</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.0.1" />
+    <!-- The plugin excludes Jellyfin's runtime assets; tests load them for real. -->
+    <PackageReference Include="Jellyfin.Controller" Version="12.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Jellyfin.Plugin.Cinematheque/Jellyfin.Plugin.Cinematheque.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
