@@ -130,6 +130,7 @@
 }
 
 .cin-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
@@ -351,12 +352,58 @@
   font-size: 0.8rem;
 }
 
+/* Progress -------------------------------------------------------------- */
+
+.cin-progress {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--cin-line);
+}
+
+.cin-progress-bar {
+  display: block;
+  height: 100%;
+  background: var(--cin-accent);
+}
+
+.cin-card-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.15rem;
+}
+
+.cin-seen-badge {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--cin-accent);
+  color: #fff;
+  font-size: 1.1rem;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 40%);
+}
+
 /* Status and paging ----------------------------------------------------- */
 
 .cin-count {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
   margin: 0 0 1rem;
   color: var(--cin-muted);
   font-size: 0.9rem;
+}
+
+.cin-count .cin-progress {
+  flex: 0 0 8rem;
 }
 
 .cin-status {

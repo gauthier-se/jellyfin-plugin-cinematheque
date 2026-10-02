@@ -45,8 +45,10 @@ public sealed class CatalogProvider : IDisposable
 
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
+    private readonly IUserDataManager _userDataManager;
     private readonly ILogger<CatalogProvider> _logger;
     private readonly ConcurrentDictionary<Guid, Entry> _catalogs = new();
+    private readonly ConcurrentDictionary<Guid, Lazy<IReadOnlySet<Guid>>> _seen = new();
 
     // Credited name to TMDB person id (null when the person has none), shared by every user.
     private readonly ConcurrentDictionary<string, string?> _personTmdbIds = new(StringComparer.Ordinal);
@@ -57,17 +59,20 @@ public sealed class CatalogProvider : IDisposable
     /// </summary>
     /// <param name="libraryManager">The library manager.</param>
     /// <param name="userManager">The user manager.</param>
+    /// <param name="userDataManager">The user data manager.</param>
     /// <param name="logger">The logger.</param>
-    public CatalogProvider(ILibraryManager libraryManager, IUserManager userManager, ILogger<CatalogProvider> logger)
+    public CatalogProvider(ILibraryManager libraryManager, IUserManager userManager, IUserDataManager userDataManager, ILogger<CatalogProvider> logger)
     {
         _libraryManager = libraryManager;
         _userManager = userManager;
+        _userDataManager = userDataManager;
         _logger = logger;
 
         _libraryManager.ItemAdded += OnLibraryChanged;
         _libraryManager.ItemUpdated += OnLibraryChanged;
         _libraryManager.ItemRemoved += OnLibraryChanged;
         _userManager.OnUserUpdated += OnUserUpdated;
+        _userDataManager.UserDataSaved += OnUserDataSaved;
         if (Plugin.Instance is not null)
         {
             Plugin.Instance.ConfigurationChanged += OnConfigurationChanged;
@@ -103,6 +108,29 @@ public sealed class CatalogProvider : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the films a user has watched.
+    /// </summary>
+    /// <param name="user">The user.</param>
+    /// <returns>The ids of the watched films.</returns>
+    public IReadOnlySet<Guid> GetSeen(User user)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+
+        Lazy<IReadOnlySet<Guid>> seen = _seen.GetOrAdd(
+            user.Id,
+            _ => new Lazy<IReadOnlySet<Guid>>(() => LoadSeen(user), LazyThreadSafetyMode.ExecutionAndPublication));
+        try
+        {
+            return seen.Value;
+        }
+        catch
+        {
+            _seen.TryRemove(KeyValuePair.Create(user.Id, seen));
+            throw;
+        }
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -110,11 +138,21 @@ public sealed class CatalogProvider : IDisposable
         _libraryManager.ItemUpdated -= OnLibraryChanged;
         _libraryManager.ItemRemoved -= OnLibraryChanged;
         _userManager.OnUserUpdated -= OnUserUpdated;
+        _userDataManager.UserDataSaved -= OnUserDataSaved;
         if (Plugin.Instance is not null)
         {
             Plugin.Instance.ConfigurationChanged -= OnConfigurationChanged;
         }
     }
+
+    private HashSet<Guid> LoadSeen(User user)
+        => _libraryManager.GetItemIds(new InternalItemsQuery(user)
+        {
+            IncludeItemTypes = [BaseItemKind.Movie],
+            Recursive = true,
+            IsVirtualItem = false,
+            IsPlayed = true,
+        }).ToHashSet();
 
     private FilmCatalog Build(User user)
     {
@@ -266,7 +304,19 @@ public sealed class CatalogProvider : IDisposable
     }
 
     private void OnUserUpdated(object? sender, GenericEventArgs<User> e)
-        => _catalogs.TryRemove(e.Argument.Id, out _);
+    {
+        _catalogs.TryRemove(e.Argument.Id, out _);
+        _seen.TryRemove(e.Argument.Id, out _);
+    }
+
+    // Saved every few seconds during playback; only some reasons can flip the played flag.
+    private void OnUserDataSaved(object? sender, UserDataSaveEventArgs e)
+    {
+        if (e.Item is Movie && e.SaveReason is not (UserDataSaveReason.PlaybackProgress or UserDataSaveReason.PlaybackStart))
+        {
+            _seen.TryRemove(e.UserId, out _);
+        }
+    }
 
     private void OnConfigurationChanged(object? sender, BasePluginConfiguration e)
         => _catalogs.Clear();

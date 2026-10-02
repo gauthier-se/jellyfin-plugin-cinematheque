@@ -7,8 +7,10 @@ namespace Jellyfin.Plugin.Cinematheque.Api;
 /// </summary>
 /// <param name="Items">The films on this page.</param>
 /// <param name="TotalRecordCount">The number of matching films across all pages.</param>
+/// <param name="SeenCount">How many films the user has watched, before the unseen filter.</param>
 /// <param name="Decades">The decades present in the full result, before the decade filter.</param>
 public sealed record FilmPageDto(
     IReadOnlyList<FilmDto> Items,
     int TotalRecordCount,
+    int SeenCount,
     IReadOnlyList<DecadeDto> Decades);

@@ -38,7 +38,10 @@
       topDirectors: 'Leading directors',
       noMovementFilms: 'None in your library',
       minimum: 'Minimum number of films',
-      defaultMin: 'Default minimum'
+      defaultMin: 'Default minimum',
+      seen: '{0} seen',
+      unseenOnly: 'Not seen yet',
+      seenBadge: 'Seen'
     },
     fr: {
       title: 'Cinémathèque',
@@ -63,7 +66,10 @@
       topDirectors: 'Principaux réalisateurs',
       noMovementFilms: 'Aucun dans votre bibliothèque',
       minimum: 'Nombre minimum de films',
-      defaultMin: 'Minimum par défaut'
+      defaultMin: 'Minimum par défaut',
+      seen: '{0} vus',
+      unseenOnly: 'Pas encore vus',
+      seenBadge: 'Vu'
     }
   };
 
@@ -85,6 +91,13 @@
 
   function filmCount(n) {
     return n === 1 ? t('film') : t('films', n.toLocaleString(language()));
+  }
+
+  // A thin bar, hidden from assistive tech: the text next to it carries the numbers.
+  function progress(seen, total) {
+    var ratio = total ? Math.min(1, seen / total) : 0;
+    return h('span', { class: 'cin-progress', 'aria-hidden': 'true' },
+      h('span', { class: 'cin-progress-bar', style: 'width:' + Math.round(ratio * 100) + '%' }));
   }
 
   var regionNames = null;
@@ -337,6 +350,7 @@
     return h('ul', { class: 'cin-grid cin-grid-posters' }, films.map(function (film) {
       return h('li', null, h('a', { class: 'cin-card', href: itemHref(film.Id) },
         image(film.Id, 360, '', initials(film.Name)),
+        film.Seen ? h('span', { class: 'cin-seen-badge material-icons', role: 'img', 'aria-label': t('seenBadge'), title: t('seenBadge'), text: 'check' }) : null,
         h('span', { class: 'cin-card-title', text: film.Name }),
         h('span', { class: 'cin-card-meta', text: [film.Year, film.Directors.slice(0, 2).join(', ')].filter(Boolean).join(' · ') })));
     }));
@@ -373,6 +387,10 @@
         params.decade = route.decade;
       }
 
+      if (route.unseen) {
+        params.unseen = true;
+      }
+
       return api('Films', params).then(function (page) {
         var more = page.TotalRecordCount > page.Items.length
           ? h('button', {
@@ -385,9 +403,18 @@
             }
           })
           : null;
+        var total = route.unseen ? page.TotalRecordCount + page.SeenCount : page.TotalRecordCount;
         section.replaceChildren(
           decadeChips(route, page.Decades) || '',
-          h('p', { class: 'cin-count', text: filmCount(page.TotalRecordCount) }),
+          h('div', { class: 'cin-count' },
+            h('span', { text: filmCount(total) + ' · ' + t('seen', page.SeenCount) }),
+            progress(page.SeenCount, total),
+            h('a', {
+              class: 'cin-chip cin-chip-small' + (route.unseen ? ' cin-chip-active' : ''),
+              href: href(Object.assign({}, route, { unseen: route.unseen ? null : 1 })),
+              'aria-pressed': route.unseen ? 'true' : 'false',
+              text: t('unseenOnly')
+            })),
           filmGrid(page.Items),
           more || '');
         return section;
@@ -458,6 +485,7 @@
               image(person.Id, 300, '', initials(person.Name)),
               h('span', { class: 'cin-card-title', text: person.Name }),
               h('span', { class: 'cin-card-meta', text: [filmCount(person.FilmCount), years(person.FirstYear, person.LastYear)].filter(Boolean).join(' · ') }),
+              person.SeenCount ? h('span', { class: 'cin-card-meta cin-card-progress' }, progress(person.SeenCount, person.FilmCount), t('seen', person.SeenCount)) : null,
               h('span', { class: 'cin-card-meta cin-card-countries', text: person.Countries.map(countryName).join(', ') })));
           }))
           : empty();
@@ -510,7 +538,8 @@
       return h('ul', { class: 'cin-grid cin-grid-countries' }, countries.map(function (country) {
         return h('li', null, h('a', { class: 'cin-country', href: href({ view: 'country', country: country.Code }) },
           h('span', { class: 'cin-country-name', text: countryName(country) }),
-          h('span', { class: 'cin-card-meta', text: filmCount(country.FilmCount) }),
+          h('span', { class: 'cin-card-meta', text: filmCount(country.FilmCount) + ' · ' + t('seen', country.SeenCount) }),
+          progress(country.SeenCount, country.FilmCount),
           sparkline(country.Decades, minDecade, maxDecade, max),
           h('span', { class: 'cin-card-meta cin-card-countries', text: country.Directors.slice(0, 3).join(', ') })));
       }));
@@ -564,7 +593,8 @@
         h('span', { class: 'cin-movement-period', text: [years(movement.YearFrom, movement.YearTo), movement.Countries.map(countryName).join(', ')].filter(Boolean).join(' · ') }),
         h('span', { class: 'cin-country-name', text: movement.Name }),
         h('span', { class: 'cin-movement-description', text: movement.Description }),
-        h('span', { class: 'cin-card-meta', text: movement.FilmCount ? filmCount(movement.FilmCount) : t('noMovementFilms') })));
+        h('span', { class: 'cin-card-meta', text: movement.FilmCount ? filmCount(movement.FilmCount) + ' · ' + t('seen', movement.SeenCount) : t('noMovementFilms') }),
+        movement.FilmCount ? progress(movement.SeenCount, movement.FilmCount) : null));
       }));
     });
   }

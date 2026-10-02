@@ -22,7 +22,7 @@ public sealed class FilmCatalog
     private readonly Dictionary<PersonRole, Lazy<IReadOnlyList<PersonSummary>>> _people;
     private readonly Lazy<IReadOnlyList<CountrySummary>> _countries;
     private readonly IReadOnlyList<MovementMatcher> _movements;
-    private readonly Lazy<IReadOnlyList<(MovementDefinition Movement, int FilmCount)>> _movementCounts;
+    private readonly Lazy<IReadOnlyList<MovementSummary>> _movementSummaries;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FilmCatalog"/> class.
@@ -43,8 +43,8 @@ public sealed class FilmCatalog
             role => role,
             role => new Lazy<IReadOnlyList<PersonSummary>>(() => Summarize(role)));
         _countries = new Lazy<IReadOnlyList<CountrySummary>>(SummarizeCountries);
-        _movementCounts = new Lazy<IReadOnlyList<(MovementDefinition Movement, int FilmCount)>>(
-            () => _movements.Select(m => (m.Movement, Films.Count(m.Matches))).ToArray());
+        _movementSummaries = new Lazy<IReadOnlyList<MovementSummary>>(
+            () => _movements.Select(m => new MovementSummary(m.Movement, Films.Where(m.Matches).Select(f => f.Id).ToArray())).ToArray());
     }
 
     /// <summary>
@@ -66,10 +66,10 @@ public sealed class FilmCatalog
     public IReadOnlyList<CountrySummary> GetCountries() => _countries.Value;
 
     /// <summary>
-    /// Lists the configured movements with the number of films each one matches.
+    /// Lists the configured movements with the films each one matches.
     /// </summary>
     /// <returns>The movements, in configuration order.</returns>
-    public IReadOnlyList<(MovementDefinition Movement, int FilmCount)> GetMovements() => _movementCounts.Value;
+    public IReadOnlyList<MovementSummary> GetMovements() => _movementSummaries.Value;
 
     /// <summary>
     /// Counts films per decade, oldest first. Films without a year are left out.
@@ -193,7 +193,7 @@ public sealed class FilmCatalog
                     g.Key,
                     g.First().Credit.TmdbId,
                     ChooseName(g.Select(x => x.Credit.Name)),
-                    g.Count(),
+                    g.Select(x => x.Film.Id).ToArray(),
                     years.Length > 0 ? years.Min() : null,
                     years.Length > 0 ? years.Max() : null,
                     MostFrequent(g.SelectMany(x => x.Film.Countries), TopCountries));
@@ -208,7 +208,7 @@ public sealed class FilmCatalog
             .GroupBy(x => x.Country.Code, StringComparer.Ordinal)
             .Select(g => new CountrySummary(
                 g.First().Country,
-                g.Count(),
+                g.Select(x => x.Film.Id).ToArray(),
                 CountByDecade(g.Select(x => x.Film)),
                 g.SelectMany(x => DistinctPeople(x.Film.Directors))
                     .GroupBy(c => c.Key, StringComparer.Ordinal)

@@ -12,6 +12,7 @@ namespace Jellyfin.Plugin.Cinematheque.Api;
 /// <param name="YearTo">The last year.</param>
 /// <param name="Countries">The countries.</param>
 /// <param name="FilmCount">The number of matching films in the library.</param>
+/// <param name="SeenCount">How many of those films the user has watched.</param>
 public sealed record MovementDto(
     string Id,
     string Name,
@@ -19,4 +20,5 @@ public sealed record MovementDto(
     int? YearFrom,
     int? YearTo,
     IReadOnlyList<CountryDto> Countries,
-    int FilmCount);
+    int FilmCount,
+    int SeenCount);

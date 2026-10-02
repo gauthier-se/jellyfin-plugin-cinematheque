@@ -126,11 +126,13 @@ public class CinemathequeController : ControllerBase
             return Unauthorized();
         }
 
+        IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
         return Ok(_catalogProvider.GetCatalog(user).GetCountries()
             .Select(c => new CountrySummaryDto(
                 c.Country.Code,
                 c.Country.Name,
                 c.FilmCount,
+                c.FilmIds.Count(seen.Contains),
                 c.Decades.Select(d => new DecadeDto(d.Decade, d.FilmCount)).ToArray(),
                 c.Directors.Select(d => new PersonLinkDto(d.Key, d.Name)).ToArray()))
             .ToArray());
@@ -150,6 +152,7 @@ public class CinemathequeController : ControllerBase
             return Unauthorized();
         }
 
+        IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
         return Ok(_catalogProvider.GetCatalog(user).GetMovements()
             .Select(m => new MovementDto(
                 m.Movement.Id,
@@ -158,7 +161,8 @@ public class CinemathequeController : ControllerBase
                 m.Movement.YearFrom,
                 m.Movement.YearTo,
                 Catalog.Country.FromLocations(m.Movement.Countries).Select(ToDto).ToArray(),
-                m.FilmCount))
+                m.FilmCount,
+                m.FilmIds.Count(seen.Contains)))
             .ToArray());
     }
 
@@ -182,6 +186,7 @@ public class CinemathequeController : ControllerBase
     /// <param name="actor">Deprecated: an actor name. Use <paramref name="person"/> and <paramref name="role"/>.</param>
     /// <param name="movement">A movement id.</param>
     /// <param name="decade">A decade, such as 1960.</param>
+    /// <param name="unseen">Only the films the user has not watched.</param>
     /// <param name="startIndex">The index of the first result.</param>
     /// <param name="limit">The maximum number of results.</param>
     /// <returns>A page of films, oldest first, with the decades available for further filtering.</returns>
@@ -195,6 +200,7 @@ public class CinemathequeController : ControllerBase
         [FromQuery] string? actor,
         [FromQuery] string? movement,
         [FromQuery] int? decade,
+        [FromQuery] bool unseen = false,
         [FromQuery, Range(0, int.MaxValue)] int startIndex = 0,
         [FromQuery, Range(1, MaxPageSize)] int limit = 100)
     {
@@ -221,11 +227,19 @@ public class CinemathequeController : ControllerBase
         DecadeDto[] decades = FilmCatalog.CountByDecade(unfiltered).Select(d => new DecadeDto(d.Decade, d.FilmCount)).ToArray();
         Film[] films = decade is null ? unfiltered : unfiltered.Where(f => f.Decade == decade).ToArray();
 
+        IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
+        int seenCount = films.Count(f => seen.Contains(f.Id));
+        if (unseen)
+        {
+            films = films.Where(f => !seen.Contains(f.Id)).ToArray();
+        }
+
         return Ok(new FilmPageDto(
             films.Skip(startIndex).Take(limit)
-                .Select(f => new FilmDto(f.Id, f.Name, f.Year, f.Countries.Select(ToDto).ToArray(), f.Directors.Select(d => d.Name).ToArray()))
+                .Select(f => new FilmDto(f.Id, f.Name, f.Year, f.Countries.Select(ToDto).ToArray(), f.Directors.Select(d => d.Name).ToArray(), seen.Contains(f.Id)))
                 .ToArray(),
             films.Length,
+            seenCount,
             decades));
     }
 
@@ -266,6 +280,7 @@ public class CinemathequeController : ControllerBase
         }
 
         PersonSummary[] all = people.ToArray();
+        IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
         return Ok(new PageDto<PersonDto>(
             all.Skip(startIndex).Take(limit)
                 .Select(p => new PersonDto(
@@ -274,6 +289,7 @@ public class CinemathequeController : ControllerBase
                     p.TmdbId,
                     p.Name,
                     p.FilmCount,
+                    p.FilmIds.Count(seen.Contains),
                     p.FirstYear,
                     p.LastYear,
                     p.Countries.Select(ToDto).ToArray()))

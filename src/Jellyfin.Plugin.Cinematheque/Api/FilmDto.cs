@@ -11,9 +11,11 @@ namespace Jellyfin.Plugin.Cinematheque.Api;
 /// <param name="Year">The production year.</param>
 /// <param name="Countries">The production countries.</param>
 /// <param name="Directors">The directors.</param>
+/// <param name="Seen">Whether the user has watched the film.</param>
 public sealed record FilmDto(
     Guid Id,
     string Name,
     int? Year,
     IReadOnlyList<CountryDto> Countries,
-    IReadOnlyList<string> Directors);
+    IReadOnlyList<string> Directors,
+    bool Seen);
