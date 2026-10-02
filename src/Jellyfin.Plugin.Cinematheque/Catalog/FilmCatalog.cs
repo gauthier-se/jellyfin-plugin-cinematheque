@@ -62,6 +62,21 @@ public sealed class FilmCatalog
     public IReadOnlyList<PersonSummary> GetPeople(PersonRole role) => _people[role].Value;
 
     /// <summary>
+    /// Finds one person in a role.
+    /// </summary>
+    /// <param name="role">The role.</param>
+    /// <param name="reference">The person, in any form <see cref="PersonRef.Parse"/> accepts.</param>
+    /// <returns>The person, or <c>null</c> when nobody in that role matches.</returns>
+    public PersonSummary? FindPerson(PersonRole role, string? reference)
+    {
+        PersonRef? person = PersonRef.Parse(reference);
+        return person is null
+            ? null
+            : GetPeople(role).FirstOrDefault(p => string.Equals(p.Key, reference, StringComparison.Ordinal))
+                ?? GetPeople(role).FirstOrDefault(p => p.Spellings.Any(name => person.Matches(new Credit(name, p.TmdbId))));
+    }
+
+    /// <summary>
     /// Lists the production countries, most represented first.
     /// </summary>
     /// <param name="primaryOnly">Count each film under its first listed country only.</param>
@@ -205,6 +220,7 @@ public sealed class FilmCatalog
                     g.Key,
                     g.First().Credit.TmdbId,
                     ChooseName(g.Select(x => x.Credit.Name)),
+                    g.Select(x => x.Credit.Name).Distinct(StringComparer.Ordinal).ToArray(),
                     g.Select(x => x.Film.Id).ToArray(),
                     years.Length > 0 ? years.Min() : null,
                     years.Length > 0 ? years.Max() : null,

@@ -183,6 +183,8 @@
     return name.split(/\s+/).filter(Boolean).slice(0, 2).map(function (part) { return part[0]; }).join('').toUpperCase();
   }
 
+  // The overlay reuses jellyfin-web's own card classes, so hovering a Cinematheque card looks
+  // exactly like hovering any other card, theme included.
   function image(id, height, alt, fallbackText) {
     var frame = h('div', { class: 'cin-image' }, h('span', { class: 'cin-image-fallback', 'aria-hidden': 'true', text: fallbackText }));
     var img = h('img', {
@@ -193,6 +195,7 @@
     img.addEventListener('load', function () { frame.classList.add('cin-image-loaded'); });
     img.addEventListener('error', function () { img.remove(); });
     frame.appendChild(img);
+    frame.appendChild(h('span', { class: 'cardOverlayContainer', 'aria-hidden': 'true' }));
     return frame;
   }
 
@@ -352,7 +355,7 @@
     }
 
     return h('ul', { class: 'cin-grid cin-grid-posters' }, films.map(function (film) {
-      return h('li', null, h('a', { class: 'cin-card', href: itemHref(film.Id) },
+      return h('li', null, h('a', { class: 'cin-card card-hoverable', href: itemHref(film.Id) },
         image(film.Id, 360, '', initials(film.Name)),
         film.Seen ? h('span', { class: 'cin-seen-badge material-icons', role: 'img', 'aria-label': t('seenBadge'), title: t('seenBadge'), text: 'check' }) : null,
         h('span', { class: 'cin-card-title', text: film.Name }),
@@ -502,12 +505,12 @@
 
         var list = page.Items.length
           ? h('ul', { class: 'cin-grid cin-grid-people' }, page.Items.map(function (person) {
-            return h('li', null, h('a', { class: 'cin-card cin-person', href: href({ view: kind, person: person.Key, name: person.Name }) },
+            // Name, then one line of what matters most; years and countries live on their page.
+            var meta = filmCount(person.FilmCount) + (person.SeenCount ? ' · ' + t('seen', person.SeenCount) : '');
+            return h('li', null, h('a', { class: 'cin-card cin-person card-hoverable', href: href({ view: kind, person: person.Key, name: person.Name }) },
               image(person.Id, 300, '', initials(person.Name)),
               h('span', { class: 'cin-card-title', text: person.Name }),
-              h('span', { class: 'cin-card-meta', text: [filmCount(person.FilmCount), years(person.FirstYear, person.LastYear)].filter(Boolean).join(' · ') }),
-              person.SeenCount ? h('span', { class: 'cin-card-meta cin-card-progress' }, progress(person.SeenCount, person.FilmCount), t('seen', person.SeenCount)) : null,
-              h('span', { class: 'cin-card-meta cin-card-countries', text: person.Countries.map(countryName).join(', ') })));
+              h('span', { class: 'cin-card-meta', text: meta })));
           }))
           : empty();
 
@@ -526,14 +529,19 @@
   function personView(kind) {
     return function (route) {
       // Links carry the identity (tmdb:… or name:…); older links only have the name.
-      var filter = { person: route.person || route.name, role: kind + 's' };
-      return filmsSection(route, filter).then(function (films) {
+      var key = route.person || route.name;
+      var filter = { person: key, role: kind + 's' };
+      var details = api('People/' + kind + 's/' + encodeURIComponent(key)).catch(function () { return null; });
+      return Promise.all([details, filmsSection(route, filter)]).then(function (results) {
+        var person = results[0];
+        var meta = person ? [years(person.FirstYear, person.LastYear), person.Countries.map(countryName).join(', ')].filter(Boolean).join(' · ') : '';
         return h('div', null,
           h('div', { class: 'cin-hero' },
             h('a', { class: 'cin-back', href: href({ view: kind + 's' }), text: '← ' + t(kind + 's') }),
-            h('h2', { class: 'cin-hero-title', text: route.name }),
-            h('a', { class: 'cin-link', href: '#', onclick: function (e) { e.preventDefault(); openPerson(route.name); }, text: t('openInJellyfin') })),
-          films);
+            h('h2', { class: 'cin-hero-title', text: person ? person.Name : route.name }),
+            meta ? h('p', { class: 'cin-movement-period', text: meta }) : null,
+            h('a', { class: 'cin-link', href: '#', onclick: function (e) { e.preventDefault(); openPerson(person ? person.Name : route.name); }, text: t('openInJellyfin') })),
+          results[1]);
       });
     };
   }

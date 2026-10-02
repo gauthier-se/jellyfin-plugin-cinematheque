@@ -227,4 +227,19 @@ public class FilmCatalogTests
         Assert.Equal(1, catalog.GetCountries(primaryOnly: true).Single(c => c.Country.Code == "HK").FilmCount);
         Assert.Equal(["The Killer"], catalog.Filter(new FilmFilter(Country: "HK", PrimaryCountryOnly: true)).Select(f => f.Name));
     }
+
+    [Theory]
+    [InlineData("tmdb:25236")]
+    [InlineData("Johnnie To")]
+    [InlineData("杜琪峯")]
+    public void FindPerson_accepts_keys_and_names(string reference)
+    {
+        FilmCatalog catalog = new([Film("The Mission", 1999, directors: ["杜琪峯@25236"]), Film("Election", 2005, directors: ["Johnnie To@25236"])], []);
+
+        Assert.Equal("tmdb:25236", catalog.FindPerson(PersonRole.Director, reference)?.Key);
+    }
+
+    [Fact]
+    public void FindPerson_returns_nothing_for_someone_else()
+        => Assert.Null(_catalog.FindPerson(PersonRole.Director, "Agnès Varda"));
 }

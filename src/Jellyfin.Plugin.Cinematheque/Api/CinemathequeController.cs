@@ -76,6 +76,27 @@ public class CinemathequeController : ControllerBase
     }
 
     /// <summary>
+    /// Gets one person in a role, with their years and countries.
+    /// </summary>
+    /// <param name="role">The role: <c>directors</c>, <c>actors</c> or <c>writers</c>.</param>
+    /// <param name="key">The person key, such as <c>tmdb:25236</c>, or a name.</param>
+    /// <returns>The person, or 404 when nobody in that role matches.</returns>
+    [HttpGet("People/{role}/{key}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<PersonDto> GetPerson([FromRoute] string role, [FromRoute] string key)
+    {
+        User? user = GetUser();
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        PersonSummary? person = ParseRole(role) is PersonRole r ? _catalogProvider.GetCatalog(user).FindPerson(r, key) : null;
+        return person is null ? NotFound() : Ok(ToDto(person, _catalogProvider.GetSeen(user)));
+    }
+
+    /// <summary>
     /// Lists the directors in the user's films. Same as <c>People/directors</c>.
     /// </summary>
     /// <param name="search">Only names containing this text.</param>
@@ -311,8 +332,7 @@ public class CinemathequeController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            string key = Names.Key(search);
-            people = people.Where(p => Names.Key(p.Name).Contains(key, StringComparison.Ordinal));
+            people = people.Where(p => p.NameContains(search));
         }
 
         if (string.Equals(sortBy, "name", StringComparison.OrdinalIgnoreCase))
@@ -323,20 +343,21 @@ public class CinemathequeController : ControllerBase
         PersonSummary[] all = people.ToArray();
         IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
         return Ok(new PageDto<PersonDto>(
-            all.Skip(startIndex).Take(limit)
-                .Select(p => new PersonDto(
-                    _libraryManager.GetPersonId(p.Name),
-                    p.Key,
-                    p.TmdbId,
-                    p.Name,
-                    p.FilmCount,
-                    p.FilmIds.Count(seen.Contains),
-                    p.FirstYear,
-                    p.LastYear,
-                    p.Countries.Select(ToDto).ToArray()))
-                .ToArray(),
+            all.Skip(startIndex).Take(limit).Select(p => ToDto(p, seen)).ToArray(),
             all.Length));
     }
+
+    private PersonDto ToDto(PersonSummary person, IReadOnlySet<Guid> seen)
+        => new PersonDto(
+            _libraryManager.GetPersonId(person.Name),
+            person.Key,
+            person.TmdbId,
+            person.Name,
+            person.FilmCount,
+            person.FilmIds.Count(seen.Contains),
+            person.FirstYear,
+            person.LastYear,
+            person.Countries.Select(ToDto).ToArray());
 
     private User? GetUser()
     {

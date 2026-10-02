@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Jellyfin.Plugin.Cinematheque.Catalog;
 
@@ -9,6 +10,7 @@ namespace Jellyfin.Plugin.Cinematheque.Catalog;
 /// <param name="Key">The identity, as in <see cref="Credit.Key"/>.</param>
 /// <param name="TmdbId">The TMDB person id, when known.</param>
 /// <param name="Name">The display name: the spelling credited most often.</param>
+/// <param name="Spellings">Every spelling they are credited under, the display name included.</param>
 /// <param name="FilmIds">Their films in the library.</param>
 /// <param name="FirstYear">The earliest production year among those films.</param>
 /// <param name="LastYear">The latest production year among those films.</param>
@@ -17,6 +19,7 @@ public sealed record PersonSummary(
     string Key,
     string? TmdbId,
     string Name,
+    IReadOnlyList<string> Spellings,
     IReadOnlyList<Guid> FilmIds,
     int? FirstYear,
     int? LastYear,
@@ -26,4 +29,15 @@ public sealed record PersonSummary(
     /// Gets the number of films in the library.
     /// </summary>
     public int FilmCount => FilmIds.Count;
+
+    /// <summary>
+    /// Tells whether any spelling of the name contains a search text.
+    /// </summary>
+    /// <param name="search">The search text.</param>
+    /// <returns><c>true</c> when a spelling matches, ignoring accents, case and punctuation.</returns>
+    public bool NameContains(string search)
+    {
+        string key = Names.Key(search);
+        return Spellings.Any(s => Names.Key(s).Contains(key, StringComparison.Ordinal));
+    }
 }
