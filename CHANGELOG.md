@@ -6,6 +6,11 @@ four-part plugin versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- The Cinematheque tile in **My Media** shows its name over its picture, like the libraries next
+  to it, instead of a picture alone.
+
 ## [0.3.0] - 2026-10-02
 
 ### Changed

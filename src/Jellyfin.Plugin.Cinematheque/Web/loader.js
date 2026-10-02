@@ -173,20 +173,17 @@
     template.parentElement.appendChild(tile);
   }
 
-  // A film backdrop under a veil in the logo's colours, so the name themes write over library
-  // tiles stays readable on any picture. Fetched as a blob: URL, which keeps other plugins from
-  // mistaking the tile for that film. Drawn again for each user: signing out does not reload the
-  // page, and the next user may not have access to that film.
-  var TILE_VEIL = 'linear-gradient(135deg, rgba(110, 45, 140, 0.72), rgba(0, 110, 160, 0.62))';
+  // A film backdrop under a veil in the logo's colours, with the name written over it the way the
+  // server writes it on the pictures it generates for libraries. Drawn on a canvas, which keeps
+  // other plugins from mistaking the tile for that film. Drawn again for each user: signing out
+  // does not reload the page, and the next user may not have access to that film.
+  var TILE_VEIL = ['rgba(110, 45, 140, 0.72)', 'rgba(0, 110, 160, 0.62)'];
+  var TILE_WIDTH = 960;
+  var TILE_HEIGHT = 540;
 
   function setTileImage(element) {
     var user = ApiClient.getCurrentUserId();
-    if (tileImage && tileImageUser !== user) {
-      tileImage.then(function (url) {
-        if (url) {
-          URL.revokeObjectURL(url);
-        }
-      });
+    if (tileImageUser !== user) {
       tileImage = null;
     }
 
@@ -204,22 +201,77 @@
           throw new Error('Cinematheque: no backdrop');
         }
 
-        return ApiClient.fetch({ url: ApiClient.getScaledImageUrl(film.Id, { type: 'Backdrop', maxWidth: 800, quality: 90 }), type: 'GET' });
+        return ApiClient.fetch({ url: ApiClient.getScaledImageUrl(film.Id, { type: 'Backdrop', maxWidth: TILE_WIDTH, quality: 90 }), type: 'GET' });
       }).then(function (response) {
         return response.blob();
-      }).then(function (blob) {
-        return URL.createObjectURL(blob);
-      }).catch(function () {
+      }).then(loadPicture).catch(function () {
         return null;
+      }).then(function (picture) {
+        return drawTile(picture, label());
       });
     }
 
-    element.style.backgroundImage = TILE_VEIL;
+    element.style.backgroundImage = 'linear-gradient(135deg, ' + TILE_VEIL.join(', ') + ')';
     tileImage.then(function (url) {
-      if (url) {
-        element.style.backgroundImage = TILE_VEIL + ', url("' + url + '")';
-      }
+      element.style.backgroundImage = 'url("' + url + '")';
     });
+  }
+
+  function loadPicture(blob) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(blob);
+      var picture = new Image();
+      picture.onload = function () {
+        URL.revokeObjectURL(url);
+        resolve(picture);
+      };
+      picture.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('Cinematheque: unreadable backdrop'));
+      };
+      picture.src = url;
+    });
+  }
+
+  function drawTile(picture, name) {
+    var canvas = document.createElement('canvas');
+    canvas.width = TILE_WIDTH;
+    canvas.height = TILE_HEIGHT;
+    var context = canvas.getContext('2d');
+    context.fillStyle = '#000';
+    context.fillRect(0, 0, TILE_WIDTH, TILE_HEIGHT);
+
+    if (picture) {
+      var scale = Math.max(TILE_WIDTH / picture.width, TILE_HEIGHT / picture.height);
+      var width = picture.width * scale;
+      var height = picture.height * scale;
+      context.drawImage(picture, (TILE_WIDTH - width) / 2, (TILE_HEIGHT - height) / 2, width, height);
+    }
+
+    // The gradient line of CSS's 135deg, so the veil looks as it did when it was a CSS gradient.
+    var reach = (TILE_WIDTH + TILE_HEIGHT) / 4;
+    var veil = context.createLinearGradient(TILE_WIDTH / 2 - reach, TILE_HEIGHT / 2 - reach, TILE_WIDTH / 2 + reach, TILE_HEIGHT / 2 + reach);
+    veil.addColorStop(0, TILE_VEIL[0]);
+    veil.addColorStop(1, TILE_VEIL[1]);
+    context.fillStyle = veil;
+    context.fillRect(0, 0, TILE_WIDTH, TILE_HEIGHT);
+
+    // The server's recipe: bold, 112px on a 960px wide picture, shrunk to 90% of the width when it
+    // would take more than 95%. In the web client's font, which is loaded by the time tiles render.
+    var font = getComputedStyle(document.body).fontFamily || 'sans-serif';
+    var size = 112;
+    context.font = 'bold ' + size + 'px ' + font;
+    var textWidth = context.measureText(name).width;
+    if (textWidth > TILE_WIDTH * 0.95) {
+      size = 0.9 * TILE_WIDTH * size / textWidth;
+      context.font = 'bold ' + size + 'px ' + font;
+    }
+
+    context.fillStyle = '#fff';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(name, TILE_WIDTH / 2, TILE_HEIGHT / 2);
+    return canvas.toDataURL('image/jpeg', 0.9);
   }
 
   // The header button keeps its label in a trailing text node after the icon span.
