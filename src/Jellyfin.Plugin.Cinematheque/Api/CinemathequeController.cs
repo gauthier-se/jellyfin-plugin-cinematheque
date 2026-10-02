@@ -69,10 +69,36 @@ public class CinemathequeController : ControllerBase
         [FromQuery, Range(0, int.MaxValue)] int startIndex = 0,
         [FromQuery, Range(1, MaxPageSize)] int limit = 100)
     {
-        PersonRole? parsed = ParseRole(role);
-        return parsed is PersonRole r
-            ? GetPeople(r, search, minFilms, sortBy, startIndex, limit)
-            : NotFound();
+        if (ParseRole(role) is not PersonRole parsed)
+        {
+            return NotFound();
+        }
+
+        User? user = GetUser();
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        int min = minFilms ?? DefaultMinFilms(parsed);
+        IEnumerable<PersonSummary> people = _catalogProvider.GetCatalog(user).GetPeople(parsed)
+            .Where(p => p.FilmCount >= min);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            people = people.Where(p => p.NameContains(search));
+        }
+
+        if (string.Equals(sortBy, "name", StringComparison.OrdinalIgnoreCase))
+        {
+            people = people.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
+        }
+
+        PersonSummary[] all = people.ToArray();
+        IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
+        return Ok(new PageDto<PersonDto>(
+            all.Skip(startIndex).Take(limit).Select(p => ToDto(p, seen)).ToArray(),
+            all.Length));
     }
 
     /// <summary>
@@ -95,44 +121,6 @@ public class CinemathequeController : ControllerBase
         PersonSummary? person = ParseRole(role) is PersonRole r ? _catalogProvider.GetCatalog(user).FindPerson(r, key) : null;
         return person is null ? NotFound() : Ok(ToDto(person, _catalogProvider.GetSeen(user)));
     }
-
-    /// <summary>
-    /// Lists the directors in the user's films. Same as <c>People/directors</c>.
-    /// </summary>
-    /// <param name="search">Only names containing this text.</param>
-    /// <param name="minFilms">The minimum number of films. Defaults to the configured value.</param>
-    /// <param name="sortBy">Either <c>count</c> (default) or <c>name</c>.</param>
-    /// <param name="startIndex">The index of the first result.</param>
-    /// <param name="limit">The maximum number of results.</param>
-    /// <returns>A page of directors.</returns>
-    [HttpGet("Directors")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<PageDto<PersonDto>> GetDirectors(
-        [FromQuery] string? search,
-        [FromQuery] int? minFilms,
-        [FromQuery] string? sortBy,
-        [FromQuery, Range(0, int.MaxValue)] int startIndex = 0,
-        [FromQuery, Range(1, MaxPageSize)] int limit = 100)
-        => GetPeople(PersonRole.Director, search, minFilms, sortBy, startIndex, limit);
-
-    /// <summary>
-    /// Lists the actors in the user's films. Same as <c>People/actors</c>.
-    /// </summary>
-    /// <param name="search">Only names containing this text.</param>
-    /// <param name="minFilms">The minimum number of films. Defaults to the configured value.</param>
-    /// <param name="sortBy">Either <c>count</c> (default) or <c>name</c>.</param>
-    /// <param name="startIndex">The index of the first result.</param>
-    /// <param name="limit">The maximum number of results.</param>
-    /// <returns>A page of actors.</returns>
-    [HttpGet("Actors")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<PageDto<PersonDto>> GetActors(
-        [FromQuery] string? search,
-        [FromQuery] int? minFilms,
-        [FromQuery] string? sortBy,
-        [FromQuery, Range(0, int.MaxValue)] int startIndex = 0,
-        [FromQuery, Range(1, MaxPageSize)] int limit = 100)
-        => GetPeople(PersonRole.Actor, search, minFilms, sortBy, startIndex, limit);
 
     /// <summary>
     /// Lists the production countries in the user's films.
@@ -281,20 +269,7 @@ public class CinemathequeController : ControllerBase
     }
 
     private static FilmFilter ToFilter(FilmQuery query)
-    {
-        string? person = query.Person;
-        PersonRole? role = ParseRole(query.Role);
-        if (string.IsNullOrWhiteSpace(person) && !string.IsNullOrWhiteSpace(query.Director))
-        {
-            (person, role) = (query.Director, PersonRole.Director);
-        }
-        else if (string.IsNullOrWhiteSpace(person) && !string.IsNullOrWhiteSpace(query.Actor))
-        {
-            (person, role) = (query.Actor, PersonRole.Actor);
-        }
-
-        return new FilmFilter(query.Country, person, role, query.Movement, PrimaryCountryOnly: query.PrimaryCountry);
-    }
+        => new FilmFilter(query.Country, query.Person, ParseRole(query.Role), query.Movement, PrimaryCountryOnly: query.PrimaryCountry);
 
     private static FilmDto ToDto(Film film, IReadOnlySet<Guid> seen)
         => new FilmDto(
@@ -317,35 +292,6 @@ public class CinemathequeController : ControllerBase
 
     private static int DefaultMinFilms(PersonRole role)
         => role == PersonRole.Actor ? Configuration.MinActorFilms : Configuration.MinDirectorFilms;
-
-    private ActionResult<PageDto<PersonDto>> GetPeople(PersonRole role, string? search, int? minFilms, string? sortBy, int startIndex, int limit)
-    {
-        User? user = GetUser();
-        if (user is null)
-        {
-            return Unauthorized();
-        }
-
-        int min = minFilms ?? DefaultMinFilms(role);
-        IEnumerable<PersonSummary> people = _catalogProvider.GetCatalog(user).GetPeople(role)
-            .Where(p => p.FilmCount >= min);
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            people = people.Where(p => p.NameContains(search));
-        }
-
-        if (string.Equals(sortBy, "name", StringComparison.OrdinalIgnoreCase))
-        {
-            people = people.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase);
-        }
-
-        PersonSummary[] all = people.ToArray();
-        IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
-        return Ok(new PageDto<PersonDto>(
-            all.Skip(startIndex).Take(limit).Select(p => ToDto(p, seen)).ToArray(),
-            all.Length));
-    }
 
     private PersonDto ToDto(PersonSummary person, IReadOnlySet<Guid> seen)
         => new PersonDto(
