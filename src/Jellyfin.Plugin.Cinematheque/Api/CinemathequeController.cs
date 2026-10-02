@@ -216,10 +216,12 @@ public class CinemathequeController : ControllerBase
             return Unauthorized();
         }
 
-        // Decades are computed before the decade filter so the client can switch between them.
-        Film[] unfiltered = _catalogProvider.GetCatalog(user).Filter(ToFilter(query)).ToArray();
-        DecadeDto[] decades = FilmCatalog.CountByDecade(unfiltered).Select(d => new DecadeDto(d.Decade, d.FilmCount)).ToArray();
-        Film[] films = query.Decade is null ? unfiltered : unfiltered.Where(f => f.Decade == query.Decade).ToArray();
+        // Decades are counted before the decade filter, so the client can switch between them.
+        FilmCatalog catalog = _catalogProvider.GetCatalog(user);
+        FilmFilter filter = ToFilter(query);
+        Film[] everyDecade = catalog.Filter(filter with { Decade = null }).ToArray();
+        DecadeDto[] decades = FilmCatalog.CountByDecade(everyDecade).Select(d => new DecadeDto(d.Decade, d.FilmCount)).ToArray();
+        Film[] films = filter.Decade is null ? everyDecade : catalog.Filter(filter).ToArray();
 
         IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
         int seenCount = films.Count(f => seen.Contains(f.Id));
@@ -254,9 +256,7 @@ public class CinemathequeController : ControllerBase
             return Unauthorized();
         }
 
-        Film[] films = _catalogProvider.GetCatalog(user).Filter(ToFilter(query))
-            .Where(f => query.Decade is null || f.Decade == query.Decade)
-            .ToArray();
+        Film[] films = _catalogProvider.GetCatalog(user).Filter(ToFilter(query)).ToArray();
         IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
         Film[] unseen = films.Where(f => !seen.Contains(f.Id)).ToArray();
         Film[] pool = unseen.Length > 0 ? unseen : films;
@@ -269,7 +269,7 @@ public class CinemathequeController : ControllerBase
     }
 
     private static FilmFilter ToFilter(FilmQuery query)
-        => new FilmFilter(query.Country, query.Person, ParseRole(query.Role), query.Movement, PrimaryCountryOnly: query.PrimaryCountry);
+        => new FilmFilter(query.Country, query.Person, ParseRole(query.Role), query.Movement, query.Decade, query.PrimaryCountry);
 
     private static FilmDto ToDto(Film film, IReadOnlySet<Guid> seen)
         => new FilmDto(
