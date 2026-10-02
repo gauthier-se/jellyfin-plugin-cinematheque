@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <!-- The release workflow overrides Version from the tag; the web cache-buster reads AssemblyVersion. -->
-    <Version>0.1.0.0</Version>
+    <Version>0.2.0.0</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <TargetFramework>net10.0</TargetFramework>
