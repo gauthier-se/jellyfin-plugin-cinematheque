@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="xunit.v3" Version="4.0.1" />
+    <PackageReference Include="NSubstitute" Version="6.2.0" />
     <!-- The plugin excludes Jellyfin's runtime assets; tests load them for real. -->
     <PackageReference Include="Jellyfin.Controller" Version="12.1.0" />
   </ItemGroup>
