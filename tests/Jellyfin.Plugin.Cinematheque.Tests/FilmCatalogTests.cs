@@ -196,4 +196,20 @@ public class FilmCatalogTests
     [InlineData(new[] { "杜琪峯", "杜琪峯", "Johnnie To" }, "杜琪峯")]
     public void ChooseName_prefers_the_most_frequent_then_latin_spelling(string[] names, string expected)
         => Assert.Equal(expected, FilmCatalog.ChooseName(names));
+
+    [Fact]
+    public void Writers_are_listed_like_directors()
+    {
+        FilmCatalog catalog = new(
+            [
+                Film("The Good, the Bad and the Ugly", 1966, ["Italy"], writers: ["Sergio Leone@100", "Luciano Vincenzoni"]),
+                Film("Once Upon a Time in the West", 1968, ["Italy"], writers: ["Sergio Leone@100"]),
+            ],
+            []);
+
+        PersonSummary leone = catalog.GetPeople(PersonRole.Writer)[0];
+        Assert.Equal("Sergio Leone", leone.Name);
+        Assert.Equal(2, leone.FilmCount);
+        Assert.Equal(2, catalog.Filter(new FilmFilter(Person: "tmdb:100", Role: PersonRole.Writer)).Count());
+    }
 }

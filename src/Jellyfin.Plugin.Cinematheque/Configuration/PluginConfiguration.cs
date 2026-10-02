@@ -24,7 +24,8 @@ public class PluginConfiguration : BasePluginConfiguration
     public int MinActorFilms { get; set; } = 3;
 
     /// <summary>
-    /// Gets or sets the minimum number of films for a director to be listed by default.
+    /// Gets or sets the minimum number of films for a director or screenwriter to be
+    /// listed by default.
     /// </summary>
     public int MinDirectorFilms { get; set; } = 1;
 

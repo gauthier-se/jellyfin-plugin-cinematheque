@@ -17,7 +17,8 @@ internal static class FilmFactory
         string[]? actors = null,
         string[]? genres = null,
         string[]? tags = null,
-        string? tmdbId = null)
+        string? tmdbId = null,
+        string[]? writers = null)
         => new Film(
             Guid.NewGuid(),
             name,
@@ -28,7 +29,8 @@ internal static class FilmFactory
             tags ?? [],
             tmdbId,
             Credits(directors),
-            Credits(actors));
+            Credits(actors),
+            Credits(writers));
 
     public static Credit Credit(string person)
     {

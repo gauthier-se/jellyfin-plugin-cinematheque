@@ -166,7 +166,7 @@ public sealed class FilmCatalog
         IReadOnlyList<Credit> Fill(IReadOnlyList<Credit> credits)
             => credits.Select(c => c.TmdbId is null && idByName.TryGetValue(c.NameKey, out string? id) ? c with { TmdbId = id } : c).ToArray();
 
-        return films.Select(f => f with { Directors = Fill(f.Directors), Actors = Fill(f.Actors) }).ToArray();
+        return films.Select(f => f.WithCredits(Fill)).ToArray();
     }
 
     private static IReadOnlyList<Country> MostFrequent(IEnumerable<Country> countries, int count)

@@ -151,14 +151,18 @@ public sealed class CatalogProvider : IDisposable
                 .ToArray();
 
         var credited = items
-            .Select(item => (Item: item, Directors: CreditedNames(item, PersonKind.Director), Actors: CreditedNames(item, PersonKind.Actor, actorsPerFilm)))
+            .Select(item => (
+                Item: item,
+                Directors: CreditedNames(item, PersonKind.Director),
+                Actors: CreditedNames(item, PersonKind.Actor, actorsPerFilm),
+                Writers: CreditedNames(item, PersonKind.Writer)))
             .ToArray();
         IReadOnlyDictionary<string, string> tmdbIds = ResolvePersonTmdbIds(
-            credited.SelectMany(c => c.Directors.Concat(c.Actors)).Distinct(StringComparer.Ordinal));
+            credited.SelectMany(c => c.Directors.Concat(c.Actors).Concat(c.Writers)).Distinct(StringComparer.Ordinal));
         Credit[] Credits(string[] names) => names.Select(n => new Credit(n, tmdbIds.GetValueOrDefault(n))).ToArray();
 
         List<Film> films = new List<Film>(items.Count);
-        foreach ((BaseItem item, string[] directors, string[] actors) in credited)
+        foreach ((BaseItem item, string[] directors, string[] actors, string[] writers) in credited)
         {
             films.Add(new Film(
                 item.Id,
@@ -170,7 +174,8 @@ public sealed class CatalogProvider : IDisposable
                 item.Tags ?? [],
                 item.GetProviderId(MetadataProvider.Tmdb),
                 Credits(directors),
-                Credits(actors)));
+                Credits(actors),
+                Credits(writers)));
         }
 
         FilmCatalog catalog = new FilmCatalog(films, configuration.Movements ?? []);

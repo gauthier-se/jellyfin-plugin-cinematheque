@@ -19,6 +19,7 @@
       title: 'Cinematheque',
       directors: 'Directors',
       actors: 'Actors',
+      writers: 'Writers',
       countries: 'Countries',
       movements: 'Movements',
       search: 'Search',
@@ -43,6 +44,7 @@
       title: 'Cinémathèque',
       directors: 'Réalisateurs',
       actors: 'Acteurs',
+      writers: 'Scénaristes',
       countries: 'Pays',
       movements: 'Mouvements',
       search: 'Rechercher',
@@ -300,8 +302,14 @@
 
   // ---------------------------------------------------------------- shared pieces
 
-  var SECTIONS = ['directors', 'actors', 'countries', 'movements'];
-  var SECTION_OF = { directors: 'directors', director: 'directors', actors: 'actors', actor: 'actors', countries: 'countries', country: 'countries', movements: 'movements', movement: 'movements' };
+  var SECTIONS = ['directors', 'actors', 'writers', 'countries', 'movements'];
+  var SECTION_OF = {
+    directors: 'directors', director: 'directors',
+    actors: 'actors', actor: 'actors',
+    writers: 'writers', writer: 'writers',
+    countries: 'countries', country: 'countries',
+    movements: 'movements', movement: 'movements'
+  };
 
   function header(route) {
     var current = own(SECTION_OF, route.view) ? SECTION_OF[route.view] : 'directors';
@@ -473,7 +481,7 @@
       return filmsSection(route, filter).then(function (films) {
         return h('div', null,
           h('div', { class: 'cin-hero' },
-            h('a', { class: 'cin-back', href: href({ view: kind === 'director' ? 'directors' : 'actors' }), text: '← ' + t(kind === 'director' ? 'directors' : 'actors') }),
+            h('a', { class: 'cin-back', href: href({ view: kind + 's' }), text: '← ' + t(kind + 's') }),
             h('h2', { class: 'cin-hero-title', text: route.name }),
             h('a', { class: 'cin-link', href: '#', onclick: function (e) { e.preventDefault(); openPerson(route.name); }, text: t('openInJellyfin') })),
           films);
@@ -577,8 +585,10 @@
   var VIEWS = {
     directors: peopleView('director'),
     actors: peopleView('actor'),
+    writers: peopleView('writer'),
     director: personView('director'),
     actor: personView('actor'),
+    writer: personView('writer'),
     countries: countriesView,
     country: countryView,
     movements: movementsView,

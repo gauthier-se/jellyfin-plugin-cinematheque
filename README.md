@@ -18,6 +18,8 @@ by national cinema and by film movement.
   oldest first, filterable by decade.
 - **Actors.** The same for actors. Only the top of the bill counts (10 names per film by
   default), so the list shows leading players rather than every extra.
+- **Screenwriters.** Jean-Claude Carrière, Suso Cecchi d'Amico, Charles Brackett: the same
+  lists and filmographies for the people behind the script.
 - **Countries.** National cinemas ranked by size, each with a decade histogram and its
   leading directors. Hong Kong, Japan, Italy, the Soviet Union: historical states stay
   separate from their successors.
@@ -103,7 +105,7 @@ The tab is a client for a small REST API, available to any authenticated user:
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /Cinematheque/People/{role}` | People in a role (`directors`, `actors`), with `search`, `minFilms`, `sortBy` (`count` or `name`), `startIndex`, `limit` |
+| `GET /Cinematheque/People/{role}` | People in a role (`directors`, `actors`, `writers`), with `search`, `minFilms`, `sortBy` (`count` or `name`), `startIndex`, `limit` |
 | `GET /Cinematheque/Countries` | Countries with film counts, decades and leading directors |
 | `GET /Cinematheque/Movements` | Movements with film counts |
 | `GET /Cinematheque/Films` | Films filtered by `country`, `person` (a key such as `tmdb:25236`, or a name) with `role`, `movement`, `decade` |

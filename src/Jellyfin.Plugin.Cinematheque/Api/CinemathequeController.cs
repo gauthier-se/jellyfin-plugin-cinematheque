@@ -50,7 +50,7 @@ public class CinemathequeController : ControllerBase
     /// <summary>
     /// Lists the people credited in a role in the user's films.
     /// </summary>
-    /// <param name="role">The role, such as <c>directors</c> or <c>actors</c>.</param>
+    /// <param name="role">The role: <c>directors</c>, <c>actors</c> or <c>writers</c>.</param>
     /// <param name="search">Only names containing this text.</param>
     /// <param name="minFilms">The minimum number of films. Defaults to the configured value.</param>
     /// <param name="sortBy">Either <c>count</c> (default) or <c>name</c>.</param>
@@ -235,6 +235,7 @@ public class CinemathequeController : ControllerBase
     {
         "DIRECTOR" or "DIRECTORS" => PersonRole.Director,
         "ACTOR" or "ACTORS" => PersonRole.Actor,
+        "WRITER" or "WRITERS" => PersonRole.Writer,
         _ => null,
     };
 

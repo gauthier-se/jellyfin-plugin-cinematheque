@@ -14,4 +14,9 @@ public enum PersonRole
     /// Actors.
     /// </summary>
     Actor,
+
+    /// <summary>
+    /// Screenwriters.
+    /// </summary>
+    Writer,
 }

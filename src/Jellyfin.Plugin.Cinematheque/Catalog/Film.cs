@@ -16,6 +16,7 @@ namespace Jellyfin.Plugin.Cinematheque.Catalog;
 /// <param name="TmdbId">The TMDB id, when the film has one.</param>
 /// <param name="Directors">The directors, in credit order.</param>
 /// <param name="Actors">The actors kept for the catalog, in billing order.</param>
+/// <param name="Writers">The screenwriters, in credit order.</param>
 public sealed record Film(
     Guid Id,
     string Name,
@@ -26,7 +27,8 @@ public sealed record Film(
     IReadOnlyList<string> Tags,
     string? TmdbId,
     IReadOnlyList<Credit> Directors,
-    IReadOnlyList<Credit> Actors)
+    IReadOnlyList<Credit> Actors,
+    IReadOnlyList<Credit> Writers)
 {
     /// <summary>
     /// Gets the decade the film was made in, such as 1960, when the year is known.
@@ -42,6 +44,18 @@ public sealed record Film(
     {
         PersonRole.Director => Directors,
         PersonRole.Actor => Actors,
+        PersonRole.Writer => Writers,
         _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
     };
+
+    /// <summary>
+    /// Returns a copy of the film with every credit list transformed.
+    /// </summary>
+    /// <param name="map">The transformation, applied to each role's credits.</param>
+    /// <returns>The new film.</returns>
+    public Film WithCredits(Func<IReadOnlyList<Credit>, IReadOnlyList<Credit>> map)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        return this with { Directors = map(Directors), Actors = map(Actors), Writers = map(Writers) };
+    }
 }
