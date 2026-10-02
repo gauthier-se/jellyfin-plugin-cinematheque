@@ -231,6 +231,13 @@
     }
   }
 
+  // Records a change that is already on screen, such as a longer list, so the back button
+  // restores it, without rendering again.
+  function remember(route) {
+    history.replaceState(history.state, '', href(route));
+    renderedKey = renderKey();
+  }
+
   function itemHref(id) {
     return '#/details?id=' + encodeURIComponent(id) + '&serverId=' + encodeURIComponent(ApiClient.serverId());
   }
@@ -363,18 +370,69 @@
     return h('p', { class: 'cin-status', text: t('empty') });
   }
 
+  function filmCard(film) {
+    return h('li', null, h('a', { class: 'cin-card card-hoverable', href: itemHref(film.Id) },
+      image(film.Id, 360, '', initials(film.Name)),
+      film.Seen ? h('span', { class: 'cin-seen-badge material-icons', role: 'img', 'aria-label': t('seenBadge'), title: t('seenBadge'), text: 'check' }) : null,
+      h('span', { class: 'cin-card-title', text: film.Name }),
+      h('span', { class: 'cin-card-meta', text: [film.Year, film.Directors.slice(0, 2).join(', ')].filter(Boolean).join(' · ') })));
+  }
+
   function filmGrid(films) {
-    if (!films.length) {
-      return empty();
+    return films.length ? h('ul', { class: 'cin-grid cin-grid-posters' }, films.map(filmCard)) : empty();
+  }
+
+  // ---------------------------------------------------------------- paging
+
+  // The server caps a page at 500 items, so lists grow one page of PAGE_SIZE at a time.
+  // fetchPage(startIndex) returns that page; pages share their URLs, and so the cache.
+
+  // Loads the first `count` items of a list, one page after another.
+  function fetchList(fetchPage, count) {
+    return fetchPage(0).then(function (first) {
+      var end = Math.min(count, first.TotalRecordCount);
+      var requests = [];
+      for (var start = PAGE_SIZE; start < end; start += PAGE_SIZE) {
+        requests.push(fetchPage(start));
+      }
+
+      return Promise.all(requests).then(function (pages) {
+        var items = first.Items;
+        pages.forEach(function (page) { items = items.concat(page.Items); });
+        return Object.assign({}, first, { Items: items });
+      });
+    });
+  }
+
+  // "Show more": appends the next page to the list in place, then calls onGrow with the number
+  // of items now shown. Nothing when the list is complete.
+  function moreButton(list, page, fetchPage, toItem, onGrow) {
+    var loaded = page.Items.length;
+    if (loaded >= page.TotalRecordCount) {
+      return null;
     }
 
-    return h('ul', { class: 'cin-grid cin-grid-posters' }, films.map(function (film) {
-      return h('li', null, h('a', { class: 'cin-card card-hoverable', href: itemHref(film.Id) },
-        image(film.Id, 360, '', initials(film.Name)),
-        film.Seen ? h('span', { class: 'cin-seen-badge material-icons', role: 'img', 'aria-label': t('seenBadge'), title: t('seenBadge'), text: 'check' }) : null,
-        h('span', { class: 'cin-card-title', text: film.Name }),
-        h('span', { class: 'cin-card-meta', text: [film.Year, film.Directors.slice(0, 2).join(', ')].filter(Boolean).join(' · ') })));
-    }));
+    var button = h('button', { class: 'cin-more', type: 'button', text: t('loadMore') });
+    button.addEventListener('click', function () {
+      button.disabled = true;
+      fetchPage(loaded).then(function (next) {
+        append(list, next.Items.map(toItem));
+        loaded += next.Items.length;
+        if (onGrow) {
+          onGrow(loaded);
+        }
+
+        if (!next.Items.length || loaded >= next.TotalRecordCount) {
+          button.remove();
+        } else {
+          button.disabled = false;
+        }
+      }).catch(function (err) {
+        console.error('Cinematheque:', err);
+        button.disabled = false;
+      });
+    });
+    return button;
   }
 
   function decadeChips(route, decades) {
@@ -399,55 +457,41 @@
 
   // Film list with decade filter and "show more", for any filter combination.
   function filmsSection(route, filter) {
-    var section = h('section', { class: 'cin-films' });
-    var limit = PAGE_SIZE;
-
-    function load() {
-      var params = Object.assign({ startIndex: 0, limit: limit }, filter);
-      if (route.decade) {
-        params.decade = route.decade;
-      }
-
-      if (route.unseen) {
-        params.unseen = true;
-      }
-
-      return api('Films', params).then(function (page) {
-        var more = page.TotalRecordCount > page.Items.length
-          ? h('button', {
-            class: 'cin-more',
-            type: 'button',
-            text: t('loadMore'),
-            onclick: function () {
-              limit += PAGE_SIZE;
-              load();
-            }
-          })
-          : null;
-        var total = route.unseen ? page.TotalRecordCount + page.SeenCount : page.TotalRecordCount;
-        section.replaceChildren(
-          decadeChips(route, page.Decades) || '',
-          h('div', { class: 'cin-count' },
-            h('span', { text: filmCount(total) + ' · ' + t('seen', page.SeenCount) }),
-            progress(page.SeenCount, total),
-            h('a', {
-              class: 'cin-chip cin-chip-small' + (route.unseen ? ' cin-chip-active' : ''),
-              href: href(Object.assign({}, route, { unseen: route.unseen ? null : 1 })),
-              'aria-pressed': route.unseen ? 'true' : 'false',
-              text: t('unseenOnly')
-            }),
-            total ? h('button', {
-              class: 'cin-chip cin-chip-small cin-pick',
-              type: 'button',
-              onclick: function () { pickFilm(filter, route.decade); }
-            }, h('span', { class: 'material-icons', 'aria-hidden': 'true', text: 'shuffle' }), t('pick')) : null),
-          filmGrid(page.Items),
-          more || '');
-        return section;
-      });
+    var params = Object.assign({}, filter);
+    if (route.decade) {
+      params.decade = route.decade;
     }
 
-    return load();
+    if (route.unseen) {
+      params.unseen = true;
+    }
+
+    function fetchPage(startIndex) {
+      return api('Films', Object.assign({ startIndex: startIndex, limit: PAGE_SIZE }, params));
+    }
+
+    return fetchPage(0).then(function (page) {
+      var total = route.unseen ? page.TotalRecordCount + page.SeenCount : page.TotalRecordCount;
+      var grid = filmGrid(page.Items);
+      return h('section', { class: 'cin-films' },
+        decadeChips(route, page.Decades),
+        h('div', { class: 'cin-count' },
+          h('span', { text: filmCount(total) + ' · ' + t('seen', page.SeenCount) }),
+          progress(page.SeenCount, total),
+          h('a', {
+            class: 'cin-chip cin-chip-small' + (route.unseen ? ' cin-chip-active' : ''),
+            href: href(Object.assign({}, route, { unseen: route.unseen ? null : 1 })),
+            'aria-pressed': route.unseen ? 'true' : 'false',
+            text: t('unseenOnly')
+          }),
+          total ? h('button', {
+            class: 'cin-chip cin-chip-small cin-pick',
+            type: 'button',
+            onclick: function () { pickFilm(filter, route.decade); }
+          }, h('span', { class: 'material-icons', 'aria-hidden': 'true', text: 'shuffle' }), t('pick')) : null),
+        grid,
+        moreButton(grid, page, fetchPage, filmCard));
+    });
   }
 
   // Never cached: each click must draw again.
@@ -467,8 +511,7 @@
   function peopleView(kind) {
     return function (route) {
       var endpoint = 'People/' + kind + 's';
-      var limit = Number(route.limit) || PAGE_SIZE;
-      var params = { startIndex: 0, limit: limit, sortBy: route.sort || 'count' };
+      var params = { sortBy: route.sort || 'count' };
       if (route.q) {
         params.search = route.q;
       }
@@ -477,7 +520,21 @@
         params.minFilms = route.min;
       }
 
-      return api(endpoint, params).then(function (page) {
+      function fetchPage(startIndex) {
+        return api(endpoint, Object.assign({ startIndex: startIndex, limit: PAGE_SIZE }, params));
+      }
+
+      // Name, then one line of what matters most; years and countries live on their page.
+      function personCard(person) {
+        var meta = filmCount(person.FilmCount) + (person.SeenCount ? ' · ' + t('seen', person.SeenCount) : '');
+        return h('li', null, h('a', { class: 'cin-card cin-person card-hoverable', href: href({ view: kind, person: person.Key, name: person.Name }) },
+          image(person.Id, 300, '', initials(person.Name)),
+          h('span', { class: 'cin-card-title', text: person.Name }),
+          h('span', { class: 'cin-card-meta', text: meta })));
+      }
+
+      // The URL keeps how far the list was opened, so coming back from a person restores it.
+      return fetchList(fetchPage, Number(route.limit) || PAGE_SIZE).then(function (page) {
         var search = h('input', {
           class: 'cin-input',
           type: 'search',
@@ -518,19 +575,12 @@
         }));
 
         var list = page.Items.length
-          ? h('ul', { class: 'cin-grid cin-grid-people' }, page.Items.map(function (person) {
-            // Name, then one line of what matters most; years and countries live on their page.
-            var meta = filmCount(person.FilmCount) + (person.SeenCount ? ' · ' + t('seen', person.SeenCount) : '');
-            return h('li', null, h('a', { class: 'cin-card cin-person card-hoverable', href: href({ view: kind, person: person.Key, name: person.Name }) },
-              image(person.Id, 300, '', initials(person.Name)),
-              h('span', { class: 'cin-card-title', text: person.Name }),
-              h('span', { class: 'cin-card-meta', text: meta })));
-          }))
+          ? h('ul', { class: 'cin-grid cin-grid-people' }, page.Items.map(personCard))
           : empty();
 
-        var more = page.TotalRecordCount > page.Items.length
-          ? h('a', { class: 'cin-more', href: href(Object.assign({}, route, { limit: limit + PAGE_SIZE })), text: t('loadMore') })
-          : null;
+        var more = moreButton(list, page, fetchPage, personCard, function (shown) {
+          remember(Object.assign({}, route, { limit: shown }));
+        });
 
         return h('div', null,
           h('div', { class: 'cin-toolbar' }, search, sort, min),
