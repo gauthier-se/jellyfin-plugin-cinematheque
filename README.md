@@ -5,7 +5,11 @@ browse your film library the way a cinematheque programs it: by director, by act
 by national cinema and by film movement.
 
 [![CI](https://github.com/gauthier-se/jellyfin-plugin-cinematheque/actions/workflows/ci.yml/badge.svg)](https://github.com/gauthier-se/jellyfin-plugin-cinematheque/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/gauthier-se/jellyfin-plugin-cinematheque)](https://github.com/gauthier-se/jellyfin-plugin-cinematheque/releases/latest)
+[![Jellyfin 12.1](https://img.shields.io/badge/Jellyfin-12.1-00a4dc)](https://jellyfin.org)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+
+![Directors in the Cinematheque tab](docs/screenshots/directors.jpg)
 
 ## Features
 
@@ -25,6 +29,14 @@ by national cinema and by film movement.
 Everything respects each user's library access and parental controls. The interface is
 available in English and French, and country names follow the user's language.
 
+## Screenshots
+
+| National cinemas | Hong Kong, by decade |
+|:---:|:---:|
+| ![Countries with decade histograms](docs/screenshots/countries.jpg) | ![Hong Kong films with leading directors and decade filters](docs/screenshots/country.jpg) |
+| **Film movements** | **The French New Wave** |
+| ![Curated film movements](docs/screenshots/movements.jpg) | ![French New Wave films in the library](docs/screenshots/movement.jpg) |
+
 ## Requirements
 
 - Jellyfin **12.1**
@@ -42,8 +54,9 @@ available in English and French, and country names follow the user's language.
 2. In **Catalog**, install **File Transformation**, then **Cinematheque**.
 3. Restart the server, then reload the web client.
 
-The tab appears next to **Favorites** in the header, or in the navigation drawer on small
-screens and in the legacy layouts.
+The tab appears next to **Favorites** in the header of the modern layout, and under
+**Home** in the navigation drawer on small screens and in the legacy layouts (desktop,
+mobile and TV).
 
 ### Manual installation
 
