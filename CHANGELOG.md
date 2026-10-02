@@ -6,6 +6,12 @@ four-part plugin versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- Legacy layouts: the Home and Favorites tabs now close the Cinematheque view.
+
+## [0.1.0] - 2026-10-02
+
 ### Added
 
 - Directors and actors lists with portraits, film counts, active years and main countries.
@@ -14,3 +20,6 @@ four-part plugin versioning.
 - Curated film movements, editable from the plugin configuration page.
 - Cinematheque tab in the modern and legacy web client layouts, through File Transformation.
 - English and French interface.
+
+[Unreleased]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/releases/tag/v0.1.0

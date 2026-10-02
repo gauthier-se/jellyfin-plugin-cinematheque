@@ -197,6 +197,16 @@
     }
   }).observe(document.body, { childList: true, subtree: true });
 
+  // Legacy layouts switch the home tabs (Home, Favorites) in place without touching the URL,
+  // so the view would stay on top of them. Leave it by navigating to the chosen tab.
+  document.addEventListener('click', function (e) {
+    var tab = isActive() && e.target.closest ? e.target.closest('.emby-tabs-slider .emby-tab-button') : null;
+    if (tab) {
+      var index = tab.getAttribute('data-index');
+      location.hash = index && index !== '0' ? '#/home?tab=' + index : '#/home';
+    }
+  }, true);
+
   window.addEventListener('hashchange', schedule);
   schedule();
 })();
