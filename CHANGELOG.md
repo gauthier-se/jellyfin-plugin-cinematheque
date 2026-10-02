@@ -6,6 +6,11 @@ four-part plugin versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Built-in movements now update with the plugin; the configuration only keeps your changes.
+  Copies of built-ins saved by 0.1 are replaced by the current versions on upgrade.
+
 ### Fixed
 
 - Legacy layouts: the Home and Favorites tabs now close the Cinematheque view.

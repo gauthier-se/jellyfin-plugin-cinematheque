@@ -67,6 +67,48 @@ public class MovementDefinition
     public string[] TmdbIds { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets the name and description in other languages. <see cref="Name"/> and
+    /// <see cref="Description"/> are the fallback.
+    /// </summary>
+    public MovementTranslation[] Translations { get; set; } = [];
+
+    /// <summary>
+    /// Gets the name and description in a language, falling back to the base language and then
+    /// to the untranslated text.
+    /// </summary>
+    /// <param name="language">A language code such as <c>fr</c> or <c>fr-CA</c>.</param>
+    /// <returns>The name and description.</returns>
+    public (string Name, string Description) Localize(string? language)
+    {
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            string baseLanguage = language.Split('-', '_')[0];
+            MovementTranslation? translation =
+                Array.Find(Translations ?? [], t => string.Equals(t.Language, language, StringComparison.OrdinalIgnoreCase))
+                ?? Array.Find(Translations ?? [], t => string.Equals(t.Language, baseLanguage, StringComparison.OrdinalIgnoreCase));
+            if (translation is not null && !string.IsNullOrWhiteSpace(translation.Name))
+            {
+                return (translation.Name, string.IsNullOrWhiteSpace(translation.Description) ? Description : translation.Description);
+            }
+        }
+
+        return (Name, Description);
+    }
+
+    /// <summary>
+    /// Adds a translation. Convenience for the built-in defaults.
+    /// </summary>
+    /// <param name="language">The language code.</param>
+    /// <param name="name">The translated name.</param>
+    /// <param name="description">The translated description.</param>
+    /// <returns>This movement.</returns>
+    public MovementDefinition WithTranslation(string language, string name, string description)
+    {
+        Translations = [.. Translations ?? [], new MovementTranslation { Language = language, Name = name, Description = description }];
+        return this;
+    }
+
+    /// <summary>
     /// Creates a movement from its rules. Convenience for the built-in defaults and tests.
     /// </summary>
     /// <param name="id">The identifier.</param>

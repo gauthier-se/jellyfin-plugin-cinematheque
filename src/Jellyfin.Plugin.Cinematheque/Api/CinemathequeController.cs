@@ -141,12 +141,13 @@ public class CinemathequeController : ControllerBase
     }
 
     /// <summary>
-    /// Lists the configured movements.
+    /// Lists the movements in effect.
     /// </summary>
+    /// <param name="language">The language to name them in, such as <c>fr</c>. English when unset or untranslated.</param>
     /// <returns>The movements, in configuration order.</returns>
     [HttpGet("Movements")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<IReadOnlyList<MovementDto>> GetMovements()
+    public ActionResult<IReadOnlyList<MovementDto>> GetMovements([FromQuery] string? language)
     {
         User? user = GetUser();
         if (user is null)
@@ -156,15 +157,19 @@ public class CinemathequeController : ControllerBase
 
         IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
         return Ok(_catalogProvider.GetCatalog(user).GetMovements()
-            .Select(m => new MovementDto(
-                m.Movement.Id,
-                m.Movement.Name,
-                m.Movement.Description,
-                m.Movement.YearFrom,
-                m.Movement.YearTo,
-                Catalog.Country.FromLocations(m.Movement.Countries).Select(ToDto).ToArray(),
-                m.FilmCount,
-                m.FilmIds.Count(seen.Contains)))
+            .Select(m =>
+            {
+                (string name, string description) = m.Movement.Localize(language);
+                return new MovementDto(
+                    m.Movement.Id,
+                    name,
+                    description,
+                    m.Movement.YearFrom,
+                    m.Movement.YearTo,
+                    Catalog.Country.FromLocations(m.Movement.Countries).Select(ToDto).ToArray(),
+                    m.FilmCount,
+                    m.FilmIds.Count(seen.Contains));
+            })
             .ToArray());
     }
 

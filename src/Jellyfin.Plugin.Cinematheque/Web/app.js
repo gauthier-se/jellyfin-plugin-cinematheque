@@ -617,7 +617,7 @@
   }
 
   function movementsView() {
-    return api('Movements').then(function (movements) {
+    return api('Movements', { language: language() }).then(function (movements) {
       if (!movements.length) {
         return empty();
       }
@@ -637,7 +637,7 @@
   }
 
   function movementView(route) {
-    return Promise.all([api('Movements'), filmsSection(route, { movement: route.movement })]).then(function (results) {
+    return Promise.all([api('Movements', { language: language() }), filmsSection(route, { movement: route.movement })]).then(function (results) {
       var movement = results[0].find(function (m) { return m.Id === route.movement; }) || { Name: route.movement, Description: '', Countries: [] };
       return h('div', null,
         h('div', { class: 'cin-hero' },

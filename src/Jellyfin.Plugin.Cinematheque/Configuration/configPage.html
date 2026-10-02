@@ -40,10 +40,11 @@
           <div class="verticalSection">
             <h3 class="sectionTitle">Movements</h3>
             <div class="inputContainer">
-              <label class="textareaLabel" for="Movements">Movements (JSON)</label>
+              <label class="textareaLabel" for="Movements">Your movements (JSON)</label>
               <textarea id="Movements" name="Movements" is="emby-textarea" rows="24" spellcheck="false" style="font-family: monospace; font-size: 0.85em;"></textarea>
               <div class="fieldDescription">
-                A film belongs to a movement when its TMDB id is in <code>TmdbIds</code>, or when it matches every rule that is set:
+                Built-in movements update with the plugin. List here the movements you add, and built-ins you
+                change under their own <code>Id</code>. A film belongs to a movement when its TMDB id is in <code>TmdbIds</code>, or when it matches every rule that is set:
                 one of the <code>Countries</code> (ISO codes or names), between <code>YearFrom</code> and <code>YearTo</code>,
                 by one of the <code>Directors</code>, with one of the <code>Genres</code> and one of the <code>Tags</code>.
                 Names are compared without accents or punctuation.
@@ -51,7 +52,7 @@
               <div id="MovementsError" class="fieldDescription" style="color: #e57373;" hidden></div>
             </div>
             <button id="ResetMovements" is="emby-button" type="button" class="raised emby-button">
-              <span>Restore the default movements</span>
+              <span>Restore the built-in movements</span>
             </button>
           </div>
 
@@ -95,13 +96,15 @@
             page.querySelector('#ActorsPerFilm').value = config.ActorsPerFilm;
             page.querySelector('#MinActorFilms').value = config.MinActorFilms;
             page.querySelector('#MinDirectorFilms').value = config.MinDirectorFilms;
-            showMovements(config.Movements);
+            showMovements(config.CustomMovements);
             Dashboard.hideLoadingMsg();
           });
         });
 
+        // Built-ins come from the plugin itself: restoring them means dropping your changes.
         page.querySelector('#ResetMovements').addEventListener('click', function () {
-          ApiClient.getJSON(ApiClient.getUrl('Cinematheque/Movements/Defaults')).then(showMovements);
+          showMovements([]);
+          page.dataset.resetHidden = 'true';
         });
 
         form.addEventListener('submit', function (e) {
@@ -123,7 +126,11 @@
             config.ActorsPerFilm = parseInt(page.querySelector('#ActorsPerFilm').value, 10);
             config.MinActorFilms = parseInt(page.querySelector('#MinActorFilms').value, 10);
             config.MinDirectorFilms = parseInt(page.querySelector('#MinDirectorFilms').value, 10);
-            config.Movements = list;
+            config.CustomMovements = list;
+            if (page.dataset.resetHidden === 'true') {
+              config.HiddenMovements = [];
+              delete page.dataset.resetHidden;
+            }
             return ApiClient.updatePluginConfiguration(pluginId, config);
           }).then(function (result) {
             Dashboard.processPluginConfigurationUpdateResult(result);

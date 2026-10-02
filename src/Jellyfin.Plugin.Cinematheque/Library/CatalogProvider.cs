@@ -216,7 +216,7 @@ public sealed class CatalogProvider : IDisposable
                 Credits(writers)));
         }
 
-        FilmCatalog catalog = new FilmCatalog(films, configuration.Movements ?? []);
+        FilmCatalog catalog = new FilmCatalog(films, configuration.GetEffectiveMovements());
         _logger.LogDebug(
             "Built the Cinematheque catalog for user {UserId}: {FilmCount} films in {ElapsedMilliseconds} ms",
             user.Id,
