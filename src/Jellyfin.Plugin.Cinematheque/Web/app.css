@@ -1,0 +1,409 @@
+/*
+ * Cinematheque styles. Colours derive from currentColor so the view follows whichever
+ * Jellyfin theme is active, light or dark; only the accent is fixed, to Jellyfin blue.
+ */
+
+.cinematheque-host > :not(#cinematheque-root) {
+  display: none !important;
+}
+
+.cinematheque {
+  --cin-accent: #00a4dc;
+  --cin-line: color-mix(in srgb, currentColor 14%, transparent);
+  --cin-fill: color-mix(in srgb, currentColor 6%, transparent);
+  --cin-muted: color-mix(in srgb, currentColor 62%, transparent);
+  --cin-gap: 1rem;
+  box-sizing: border-box;
+  padding: 1.5rem clamp(1rem, 3.5vw, 3rem) 4rem;
+  min-height: calc(100vh - 4rem);
+}
+
+.cinematheque *,
+.cinematheque *::before,
+.cinematheque *::after {
+  box-sizing: inherit;
+}
+
+.cinematheque a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cinematheque a:focus-visible,
+.cinematheque button:focus-visible,
+.cinematheque .cin-input:focus-visible {
+  outline: 2px solid var(--cin-accent);
+  outline-offset: 2px;
+}
+
+/* Header ---------------------------------------------------------------- */
+
+.cin-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 2rem;
+  margin-bottom: 1.75rem;
+  border-bottom: 1px solid var(--cin-line);
+}
+
+.cin-title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.cin-tabs {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cin-tab {
+  padding: 0.75rem 0.9rem;
+  border-bottom: 2px solid transparent;
+  color: var(--cin-muted) !important;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cin-tab:hover {
+  color: inherit !important;
+}
+
+.cin-tab-active {
+  border-bottom-color: var(--cin-accent);
+  color: inherit !important;
+}
+
+/* Toolbar and inputs ---------------------------------------------------- */
+
+.cin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.cin-input {
+  min-height: 2.5rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--cin-line);
+  border-radius: 6px;
+  background: var(--cin-fill);
+  color: inherit;
+  font: inherit;
+}
+
+.cin-input[type="search"] {
+  flex: 1 1 16rem;
+  max-width: 28rem;
+}
+
+.cin-input option {
+  color: #111;
+}
+
+/* Grids and cards ------------------------------------------------------- */
+
+.cin-grid {
+  display: grid;
+  gap: 1.5rem var(--cin-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cin-grid-posters {
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+}
+
+.cin-grid-people {
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+}
+
+.cin-grid-countries,
+.cin-grid-movements {
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+}
+
+.cin-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.cin-image {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2 / 3;
+  margin-bottom: 0.45rem;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--cin-fill);
+  transition: transform 0.15s ease;
+}
+
+.cin-person .cin-image {
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+.cin-image img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.cin-image-loaded img {
+  opacity: 1;
+}
+
+.cin-image-fallback {
+  color: var(--cin-muted);
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.cin-card:hover .cin-image {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 2px var(--cin-accent);
+}
+
+.cin-card-title {
+  overflow: hidden;
+  font-weight: 500;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cin-person .cin-card-title {
+  text-align: center;
+  white-space: normal;
+}
+
+.cin-card-meta {
+  color: var(--cin-muted);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.cin-person .cin-card-meta {
+  text-align: center;
+}
+
+.cin-card-countries {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Countries and movements ----------------------------------------------- */
+
+.cin-country,
+.cin-movement {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  height: 100%;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--cin-line);
+  border-radius: 8px;
+  background: var(--cin-fill);
+  transition: border-color 0.15s ease;
+}
+
+.cin-country:hover,
+.cin-movement:hover {
+  border-color: var(--cin-accent);
+}
+
+.cin-country-name {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.cin-spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 2.25rem;
+  margin: 0.35rem 0;
+}
+
+.cin-bar {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 1px;
+  background: var(--cin-accent);
+}
+
+.cin-bar-empty {
+  background: var(--cin-line);
+}
+
+.cin-movement-empty {
+  opacity: 0.55;
+}
+
+.cin-movement-period {
+  margin: 0;
+  color: var(--cin-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cin-movement-description {
+  flex: 1;
+  line-height: 1.45;
+}
+
+/* Detail pages ---------------------------------------------------------- */
+
+.cin-hero {
+  margin-bottom: 1.5rem;
+}
+
+.cin-back {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  color: var(--cin-muted) !important;
+  font-size: 0.9rem;
+}
+
+.cin-back:hover {
+  color: inherit !important;
+}
+
+.cin-hero-title {
+  margin: 0 0 0.4rem;
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.cin-hero-text {
+  max-width: 48rem;
+  margin: 0.5rem 0 0;
+  line-height: 1.5;
+}
+
+.cin-link {
+  color: var(--cin-accent) !important;
+  font-size: 0.9rem;
+}
+
+.cin-related {
+  margin-bottom: 1.5rem;
+}
+
+.cin-subtitle {
+  margin: 0 0 0.6rem;
+  color: var(--cin-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Chips ----------------------------------------------------------------- */
+
+.cin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.cin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--cin-line);
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cin-chip:hover {
+  border-color: var(--cin-accent);
+}
+
+.cin-chip-active {
+  border-color: var(--cin-accent);
+  background: color-mix(in srgb, var(--cin-accent) 22%, transparent);
+}
+
+.cin-chip-count {
+  color: var(--cin-muted);
+  font-size: 0.8rem;
+}
+
+/* Status and paging ----------------------------------------------------- */
+
+.cin-count {
+  margin: 0 0 1rem;
+  color: var(--cin-muted);
+  font-size: 0.9rem;
+}
+
+.cin-status {
+  padding: 3rem 0;
+  color: var(--cin-muted);
+  text-align: center;
+}
+
+.cin-error {
+  color: #e57373;
+}
+
+.cin-more {
+  display: block;
+  margin: 2rem auto 0;
+  padding: 0.6rem 1.5rem;
+  border: 1px solid var(--cin-line);
+  border-radius: 6px;
+  background: var(--cin-fill);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+  width: fit-content;
+}
+
+.cin-more:hover {
+  border-color: var(--cin-accent);
+}
+
+@media (max-width: 600px) {
+  .cin-grid-posters {
+    grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  }
+
+  .cin-grid-people {
+    grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  }
+
+  .cin-hero-title {
+    font-size: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cin-image,
+  .cin-image img {
+    transition: none;
+  }
+}
