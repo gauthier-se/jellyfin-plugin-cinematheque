@@ -22,7 +22,9 @@ by national cinema and by film movement.
   lists and filmographies for the people behind the script.
 - **Countries.** National cinemas ranked by size, each with a decade histogram and its
   leading directors. Hong Kong, Japan, Italy, the Soviet Union: historical states stay
-  separate from their successors.
+  separate from their successors. Co-productions count under every partner by default, or
+  under their first listed country only, which keeps a Hollywood film with Hong Kong money out
+  of Hong Kong cinema.
 - **Movements.** Curated movements such as German Expressionism, Italian Neorealism, the
   French New Wave, the Japanese New Wave, the Hong Kong New Wave or Taiwan New Cinema,
   matched against your library by country, period and director. Administrators can edit
@@ -106,10 +108,10 @@ The tab is a client for a small REST API, available to any authenticated user:
 | Endpoint | Description |
 |----------|-------------|
 | `GET /Cinematheque/People/{role}` | People in a role (`directors`, `actors`, `writers`), with `search`, `minFilms`, `sortBy` (`count` or `name`), `startIndex`, `limit` |
-| `GET /Cinematheque/Countries` | Countries with film counts, decades and leading directors |
+| `GET /Cinematheque/Countries` | Countries with film counts, decades and leading directors; `primaryOnly` counts each film under its first country |
 | `GET /Cinematheque/Movements` | Movements with film counts |
+| `GET /Cinematheque/Films` | Films filtered by `country` (with `primaryCountry`), `person` (a key such as `tmdb:25236`, or a name) with `role`, `movement`, `decade`, `unseen` |
 | `GET /Cinematheque/Films/Random` | One film picked among the same filters, preferring films the user has not watched |
-| `GET /Cinematheque/Films` | Films filtered by `country`, `person` (a key such as `tmdb:25236`, or a name) with `role`, `movement`, `decade` |
 
 ## How it works
 

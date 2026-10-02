@@ -42,7 +42,8 @@
       seen: '{0} seen',
       unseenOnly: 'Not seen yet',
       seenBadge: 'Seen',
-      pick: 'Pick a film for me'
+      pick: 'Pick a film for me',
+      coproductions: 'Include co-productions'
     },
     fr: {
       title: 'Cinémathèque',
@@ -71,7 +72,8 @@
       seen: '{0} vus',
       unseenOnly: 'Pas encore vus',
       seenBadge: 'Vu',
-      pick: 'Programme-moi un film'
+      pick: 'Programme-moi un film',
+      coproductions: 'Inclure les coproductions'
     }
   };
 
@@ -542,8 +544,22 @@
     }).catch(function (err) { console.error('Cinematheque:', err); });
   }
 
+  // Co-productions count under every country by default; "primary" keeps the first one only.
+  function countryParams(route) {
+    return route.primary ? { primaryOnly: true } : {};
+  }
+
+  function coproductionToggle(route) {
+    return h('a', {
+      class: 'cin-chip cin-chip-small' + (route.primary ? '' : ' cin-chip-active'),
+      href: href(Object.assign({}, route, { primary: route.primary ? null : 1 })),
+      'aria-pressed': route.primary ? 'false' : 'true',
+      text: t('coproductions')
+    });
+  }
+
   function countriesView(route) {
-    return api('Countries').then(function (countries) {
+    return api('Countries', countryParams(route)).then(function (countries) {
       if (!countries.length) {
         return empty();
       }
@@ -554,14 +570,14 @@
       var minDecade = countries.reduce(function (m, c) { return c.Decades.length ? Math.min(m, c.Decades[0].Decade) : m; }, 3000);
       var maxDecade = countries.reduce(function (m, c) { return c.Decades.length ? Math.max(m, c.Decades[c.Decades.length - 1].Decade) : m; }, 0);
 
-      return h('ul', { class: 'cin-grid cin-grid-countries' }, countries.map(function (country) {
-        return h('li', null, h('a', { class: 'cin-country', href: href({ view: 'country', country: country.Code }) },
+      return h('div', null, h('div', { class: 'cin-toolbar' }, coproductionToggle(route)), h('ul', { class: 'cin-grid cin-grid-countries' }, countries.map(function (country) {
+        return h('li', null, h('a', { class: 'cin-country', href: href({ view: 'country', country: country.Code, primary: route.primary }) },
           h('span', { class: 'cin-country-name', text: countryName(country) }),
           h('span', { class: 'cin-card-meta', text: filmCount(country.FilmCount) + ' · ' + t('seen', country.SeenCount) }),
           progress(country.SeenCount, country.FilmCount),
           sparkline(country.Decades, minDecade, maxDecade, max),
-          h('span', { class: 'cin-card-meta cin-card-countries', text: country.Directors.slice(0, 3).join(', ') })));
-      }));
+          h('span', { class: 'cin-card-meta cin-card-countries', text: country.Directors.slice(0, 3).map(function (d) { return d.Name; }).join(', ') })));
+      })));
     });
   }
 
@@ -583,12 +599,14 @@
   }
 
   function countryView(route) {
-    return Promise.all([api('Countries'), filmsSection(route, { country: route.country })]).then(function (results) {
+    var filter = route.primary ? { country: route.country, primaryCountry: true } : { country: route.country };
+    return Promise.all([api('Countries', countryParams(route)), filmsSection(route, filter)]).then(function (results) {
       var summary = results[0].find(function (c) { return c.Code === route.country; }) || { Code: route.country, Name: route.country, Directors: [] };
       return h('div', null,
         h('div', { class: 'cin-hero' },
-          h('a', { class: 'cin-back', href: href({ view: 'countries' }), text: '← ' + t('countries') }),
-          h('h2', { class: 'cin-hero-title', text: countryName(summary) })),
+          h('a', { class: 'cin-back', href: href({ view: 'countries', primary: route.primary }), text: '← ' + t('countries') }),
+          h('h2', { class: 'cin-hero-title', text: countryName(summary) }),
+          coproductionToggle(route)),
         summary.Directors.length ? h('div', { class: 'cin-related' },
           h('h3', { class: 'cin-subtitle', text: t('topDirectors') }),
           h('div', { class: 'cin-chips' }, summary.Directors.map(function (director) {

@@ -8,9 +8,12 @@ namespace Jellyfin.Plugin.Cinematheque.Catalog;
 /// <param name="Role">The role <paramref name="Person"/> must be credited in; any role when unset.</param>
 /// <param name="Movement">A movement id.</param>
 /// <param name="Decade">A decade, such as 1960.</param>
+/// <param name="PrimaryCountryOnly">Match <paramref name="Country"/> against the first listed production
+/// country only, leaving out co-productions where it is a minor partner.</param>
 public sealed record FilmFilter(
     string? Country = null,
     string? Person = null,
     PersonRole? Role = null,
     string? Movement = null,
-    int? Decade = null);
+    int? Decade = null,
+    bool PrimaryCountryOnly = false);

@@ -39,4 +39,10 @@ public class FilmQuery
     /// Gets or sets a decade, such as 1960.
     /// </summary>
     public int? Decade { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether <see cref="Country"/> must be the first listed
+    /// production country.
+    /// </summary>
+    public bool PrimaryCountry { get; set; }
 }

@@ -212,4 +212,19 @@ public class FilmCatalogTests
         Assert.Equal(2, leone.FilmCount);
         Assert.Equal(2, catalog.Filter(new FilmFilter(Person: "tmdb:100", Role: PersonRole.Writer)).Count());
     }
+
+    [Fact]
+    public void Primary_country_leaves_out_minor_coproduction_partners()
+    {
+        FilmCatalog catalog = new(
+            [
+                Film("Blade Runner", 1982, ["United States of America", "Hong Kong", "United Kingdom"]),
+                Film("The Killer", 1989, ["Hong Kong"]),
+            ],
+            []);
+
+        Assert.Equal(2, catalog.GetCountries().Single(c => c.Country.Code == "HK").FilmCount);
+        Assert.Equal(1, catalog.GetCountries(primaryOnly: true).Single(c => c.Country.Code == "HK").FilmCount);
+        Assert.Equal(["The Killer"], catalog.Filter(new FilmFilter(Country: "HK", PrimaryCountryOnly: true)).Select(f => f.Name));
+    }
 }

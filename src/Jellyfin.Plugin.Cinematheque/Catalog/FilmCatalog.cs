@@ -21,6 +21,7 @@ public sealed class FilmCatalog
 
     private readonly Dictionary<PersonRole, Lazy<IReadOnlyList<PersonSummary>>> _people;
     private readonly Lazy<IReadOnlyList<CountrySummary>> _countries;
+    private readonly Lazy<IReadOnlyList<CountrySummary>> _primaryCountries;
     private readonly IReadOnlyList<MovementMatcher> _movements;
     private readonly Lazy<IReadOnlyList<MovementSummary>> _movementSummaries;
 
@@ -42,7 +43,8 @@ public sealed class FilmCatalog
         _people = Enum.GetValues<PersonRole>().ToDictionary(
             role => role,
             role => new Lazy<IReadOnlyList<PersonSummary>>(() => Summarize(role)));
-        _countries = new Lazy<IReadOnlyList<CountrySummary>>(SummarizeCountries);
+        _countries = new Lazy<IReadOnlyList<CountrySummary>>(() => SummarizeCountries(primaryOnly: false));
+        _primaryCountries = new Lazy<IReadOnlyList<CountrySummary>>(() => SummarizeCountries(primaryOnly: true));
         _movementSummaries = new Lazy<IReadOnlyList<MovementSummary>>(
             () => _movements.Select(m => new MovementSummary(m.Movement, Films.Where(m.Matches).Select(f => f.Id).ToArray())).ToArray());
     }
@@ -62,8 +64,15 @@ public sealed class FilmCatalog
     /// <summary>
     /// Lists the production countries, most represented first.
     /// </summary>
+    /// <param name="primaryOnly">Count each film under its first listed country only.</param>
     /// <returns>The countries.</returns>
-    public IReadOnlyList<CountrySummary> GetCountries() => _countries.Value;
+    /// <remarks>
+    /// Metadata lists the main producing country first more often than not, so the primary view
+    /// keeps a Hollywood film with Hong Kong money out of Hong Kong cinema. It is a heuristic: some
+    /// co-productions list a minor partner first.
+    /// </remarks>
+    public IReadOnlyList<CountrySummary> GetCountries(bool primaryOnly = false)
+        => primaryOnly ? _primaryCountries.Value : _countries.Value;
 
     /// <summary>
     /// Lists the configured movements with the films each one matches.
@@ -97,7 +106,7 @@ public sealed class FilmCatalog
 
         if (!string.IsNullOrWhiteSpace(filter.Country))
         {
-            films = films.Where(f => f.Countries.Any(c => string.Equals(c.Code, filter.Country, StringComparison.OrdinalIgnoreCase)));
+            films = films.Where(f => CountriesOf(f, filter.PrimaryCountryOnly).Any(c => string.Equals(c.Code, filter.Country, StringComparison.OrdinalIgnoreCase)));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Person))
@@ -169,6 +178,9 @@ public sealed class FilmCatalog
         return films.Select(f => f.WithCredits(Fill)).ToArray();
     }
 
+    private static IEnumerable<Country> CountriesOf(Film film, bool primaryOnly)
+        => primaryOnly ? film.Countries.Take(1) : film.Countries;
+
     private static IReadOnlyList<Country> MostFrequent(IEnumerable<Country> countries, int count)
         => countries
             .GroupBy(c => c.Code, StringComparer.Ordinal)
@@ -202,9 +214,9 @@ public sealed class FilmCatalog
             .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    private IReadOnlyList<CountrySummary> SummarizeCountries()
+    private IReadOnlyList<CountrySummary> SummarizeCountries(bool primaryOnly)
         => Films
-            .SelectMany(f => f.Countries.Select(c => (Country: c, Film: f)))
+            .SelectMany(f => CountriesOf(f, primaryOnly).Select(c => (Country: c, Film: f)))
             .GroupBy(x => x.Country.Code, StringComparer.Ordinal)
             .Select(g => new CountrySummary(
                 g.First().Country,

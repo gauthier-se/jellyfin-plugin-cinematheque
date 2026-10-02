@@ -116,10 +116,11 @@ public class CinemathequeController : ControllerBase
     /// <summary>
     /// Lists the production countries in the user's films.
     /// </summary>
+    /// <param name="primaryOnly">Count each film under its first listed country only.</param>
     /// <returns>The countries, most represented first.</returns>
     [HttpGet("Countries")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public ActionResult<IReadOnlyList<CountrySummaryDto>> GetCountries()
+    public ActionResult<IReadOnlyList<CountrySummaryDto>> GetCountries([FromQuery] bool primaryOnly = false)
     {
         User? user = GetUser();
         if (user is null)
@@ -128,7 +129,7 @@ public class CinemathequeController : ControllerBase
         }
 
         IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
-        return Ok(_catalogProvider.GetCatalog(user).GetCountries()
+        return Ok(_catalogProvider.GetCatalog(user).GetCountries(primaryOnly)
             .Select(c => new CountrySummaryDto(
                 c.Country.Code,
                 c.Country.Name,
@@ -266,7 +267,7 @@ public class CinemathequeController : ControllerBase
             (person, role) = (query.Actor, PersonRole.Actor);
         }
 
-        return new FilmFilter(query.Country, person, role, query.Movement);
+        return new FilmFilter(query.Country, person, role, query.Movement, PrimaryCountryOnly: query.PrimaryCountry);
     }
 
     private static FilmDto ToDto(Film film, IReadOnlySet<Guid> seen)
