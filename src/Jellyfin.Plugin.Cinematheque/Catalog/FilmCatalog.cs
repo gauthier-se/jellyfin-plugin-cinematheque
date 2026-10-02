@@ -227,7 +227,8 @@ public sealed class FilmCatalog
                     MostFrequent(g.SelectMany(x => x.Film.Countries), TopCountries));
             })
             .OrderByDescending(p => p.FilmCount)
-            .ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(p => p.NameKey, StringComparer.Ordinal)
+            .ThenBy(p => p.Name, StringComparer.Ordinal)
             .ToArray();
 
     private IReadOnlyList<CountrySummary> SummarizeCountries(bool primaryOnly)
