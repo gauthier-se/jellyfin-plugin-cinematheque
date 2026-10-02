@@ -27,7 +27,11 @@ jobs:
           node-version: 22
 
       - name: Check web scripts
-        run: for f in src/Jellyfin.Plugin.Cinematheque/Web/*.js; do node --check "$f"; done
+        run: |
+          for f in src/Jellyfin.Plugin.Cinematheque/Web/*.js; do node --check "$f"; done
+          # The configuration page keeps its script inline.
+          python3 -c "import re; s = open('src/Jellyfin.Plugin.Cinematheque/Configuration/configPage.html').read(); open('$RUNNER_TEMP/configPage.js', 'w').write(re.search(r'<script[^>]*>(.*?)</script>', s, re.S).group(1))"
+          node --check "$RUNNER_TEMP/configPage.js"
 
       - name: Build
         run: dotnet build --configuration Release

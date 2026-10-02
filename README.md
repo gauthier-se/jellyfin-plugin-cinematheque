@@ -74,11 +74,12 @@ extract it into a `Cinematheque_<version>` folder inside your Jellyfin `plugins`
 minimum number of films for the people lists, and the movements.
 
 Built-in movements ship with the plugin and improve with each release, in English and French.
-The configuration only keeps your changes: movements you add, built-ins you edit (under the same
-`Id`) and built-ins you hide.
+The configuration page lists them in a form: edit one and your version is kept instead, hide the
+ones you do not want, or add your own. Only your changes are saved, and an import/export as JSON
+is there for bulk edits.
 
-A movement is a JSON object. A film belongs to it when its TMDB id is listed in `TmdbIds`,
-or when it matches every rule that is set:
+In JSON, a movement looks like this. A film belongs to it when its TMDB id is listed in
+`TmdbIds`, or when it matches every rule that is set:
 
 ```json
 {

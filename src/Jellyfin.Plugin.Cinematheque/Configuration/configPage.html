@@ -5,7 +5,21 @@
   <title>Cinematheque</title>
 </head>
 <body>
-  <div id="CinemathequeConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-textarea">
+  <div id="CinemathequeConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-textarea,emby-checkbox">
+    <style>
+      #CinemathequeConfigPage .cin-movement { margin: 0 0 0.75em; border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 6px; }
+      #CinemathequeConfigPage .cin-movement > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5em 1em; padding: 0.75em 1em; cursor: pointer; }
+      #CinemathequeConfigPage .cin-movement[data-hidden="true"] > summary { opacity: 0.5; }
+      #CinemathequeConfigPage .cin-movement-name { font-weight: 600; }
+      #CinemathequeConfigPage .cin-movement-meta { opacity: 0.7; font-size: 0.9em; }
+      #CinemathequeConfigPage .cin-badge { padding: 0.1em 0.6em; border-radius: 999px; background: rgba(0, 164, 220, 0.25); font-size: 0.8em; }
+      #CinemathequeConfigPage .cin-movement-body { padding: 0 1em 1em; }
+      #CinemathequeConfigPage .cin-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(12em, 1fr)); gap: 0 1em; }
+      #CinemathequeConfigPage .cin-actions { display: flex; flex-wrap: wrap; gap: 0.5em; margin-top: 0.5em; }
+      #CinemathequeConfigPage .cin-translation { display: grid; grid-template-columns: 6em 1fr 2fr auto; gap: 0.5em; align-items: end; }
+      #CinemathequeConfigPage .cin-error { color: #e57373; }
+      #CinemathequeConfigPage textarea.emby-textarea { min-height: 6em; }
+    </style>
     <div data-role="content">
       <div class="content-primary">
         <form id="CinemathequeConfigForm">
@@ -31,29 +45,39 @@
               <div class="fieldDescription">Default filter of the Actors tab. Users can change it there.</div>
             </div>
             <div class="inputContainer">
-              <label class="inputLabel inputLabelUnfocused" for="MinDirectorFilms">Minimum films for a director</label>
+              <label class="inputLabel inputLabelUnfocused" for="MinDirectorFilms">Minimum films for a director or screenwriter</label>
               <input id="MinDirectorFilms" name="MinDirectorFilms" type="number" is="emby-input" min="1" required />
-              <div class="fieldDescription">Default filter of the Directors tab. Users can change it there.</div>
+              <div class="fieldDescription">Default filter of the Directors and Writers tabs. Users can change it there.</div>
             </div>
           </div>
 
           <div class="verticalSection">
             <h3 class="sectionTitle">Movements</h3>
-            <div class="inputContainer">
-              <label class="textareaLabel" for="Movements">Your movements (JSON)</label>
-              <textarea id="Movements" name="Movements" is="emby-textarea" rows="24" spellcheck="false" style="font-family: monospace; font-size: 0.85em;"></textarea>
-              <div class="fieldDescription">
-                Built-in movements update with the plugin. List here the movements you add, and built-ins you
-                change under their own <code>Id</code>. A film belongs to a movement when its TMDB id is in <code>TmdbIds</code>, or when it matches every rule that is set:
-                one of the <code>Countries</code> (ISO codes or names), between <code>YearFrom</code> and <code>YearTo</code>,
-                by one of the <code>Directors</code>, with one of the <code>Genres</code> and one of the <code>Tags</code>.
-                Names are compared without accents or punctuation.
-              </div>
-              <div id="MovementsError" class="fieldDescription" style="color: #e57373;" hidden></div>
+            <p class="fieldDescription">
+              Built-in movements come with the plugin and improve with each release. Editing one keeps your
+              version instead; hiding one removes it from the tab. A film belongs to a movement when its TMDB id
+              is listed, or when it matches every rule that is filled in: one of the countries, within the
+              years, by one of the directors, with one of the genres and one of the tags.
+            </p>
+            <div id="MovementList"></div>
+            <div class="cin-actions">
+              <button id="AddMovement" is="emby-button" type="button" class="raised emby-button"><span>Add a movement</span></button>
             </div>
-            <button id="ResetMovements" is="emby-button" type="button" class="raised emby-button">
-              <span>Restore the built-in movements</span>
-            </button>
+            <p id="MovementsError" class="cin-error" role="alert" hidden></p>
+
+            <details style="margin-top: 1.5em;">
+              <summary>Import or export as JSON</summary>
+              <div class="inputContainer" style="margin-top: 1em;">
+                <textarea id="MovementsJson" is="emby-textarea" rows="12" spellcheck="false" aria-label="Movements as JSON" style="font-family: monospace; font-size: 0.85em;"></textarea>
+                <div class="fieldDescription">
+                  Your added and edited movements. Export, edit, then import to replace them in the form; nothing is saved until you press Save.
+                </div>
+              </div>
+              <div class="cin-actions">
+                <button id="ExportMovements" is="emby-button" type="button" class="raised emby-button"><span>Export</span></button>
+                <button id="ImportMovements" is="emby-button" type="button" class="raised emby-button"><span>Import</span></button>
+              </div>
+            </details>
           </div>
 
           <div>
@@ -69,71 +93,357 @@
         var pluginId = '6f86a1dd-c4dc-4aa6-a445-8f19be1087c1';
         var page = document.querySelector('#CinemathequeConfigPage');
         var form = page.querySelector('#CinemathequeConfigForm');
-        var movements = page.querySelector('#Movements');
+        var list = page.querySelector('#MovementList');
         var error = page.querySelector('#MovementsError');
 
-        function showMovements(list) {
-          movements.value = JSON.stringify(list || [], null, 2);
-        }
+        // Editor state: one entry per movement, built-in or added.
+        // { builtIn: definition or null, value: definition being edited, hidden: bool }
+        var entries = [];
 
-        function parseMovements() {
-          var list = JSON.parse(movements.value || '[]');
-          if (!Array.isArray(list)) {
-            throw new Error('The movements must be a JSON array.');
-          }
+        // ---------------------------------------------------------- helpers
 
-          list.forEach(function (movement, i) {
-            if (!movement || typeof movement.Id !== 'string' || !movement.Id.trim()) {
-              throw new Error('Movement #' + (i + 1) + ' needs an "Id".');
+        function h(tag, attrs) {
+          var el = document.createElement(tag);
+          Object.keys(attrs || {}).forEach(function (key) {
+            var value = attrs[key];
+            if (value === null || value === undefined || value === false) {
+              return;
+            }
+
+            if (key === 'class') {
+              el.className = value;
+            } else if (key === 'text') {
+              el.textContent = value;
+            } else if (key.indexOf('on') === 0) {
+              el.addEventListener(key.slice(2), value);
+            } else {
+              el.setAttribute(key, value === true ? '' : value);
             }
           });
-          return list;
+          for (var i = 2; i < arguments.length; i++) {
+            var child = arguments[i];
+            if (child !== null && child !== undefined && child !== false) {
+              el.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+            }
+          }
+
+          return el;
         }
 
-        page.addEventListener('pageshow', function () {
+        function clone(value) {
+          return JSON.parse(JSON.stringify(value));
+        }
+
+        // Compare definitions on the fields people edit, ignoring empty values and order of keys.
+        function normalize(m) {
+          var listOf = function (a) { return (a || []).map(function (x) { return String(x).trim(); }).filter(Boolean); };
+          return JSON.stringify({
+            Id: m.Id || '',
+            Name: (m.Name || '').trim(),
+            Description: (m.Description || '').trim(),
+            Countries: listOf(m.Countries),
+            YearFrom: m.YearFrom || null,
+            YearTo: m.YearTo || null,
+            Directors: listOf(m.Directors),
+            Genres: listOf(m.Genres),
+            Tags: listOf(m.Tags),
+            TmdbIds: listOf(m.TmdbIds),
+            Translations: (m.Translations || [])
+              .filter(function (t) { return t.Language && t.Name; })
+              .map(function (t) { return { Language: t.Language.trim(), Name: t.Name.trim(), Description: (t.Description || '').trim() }; })
+          });
+        }
+
+        function isModified(entry) {
+          return entry.builtIn && normalize(entry.builtIn) !== normalize(entry.value);
+        }
+
+        function slug(text) {
+          return (text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        }
+
+        // ---------------------------------------------------------- fields
+
+        function field(label, input, description) {
+          var id = 'cin-field-' + Math.random().toString(36).slice(2);
+          input.id = id;
+          return h('div', { class: 'inputContainer' },
+            h('label', { class: input.tagName === 'TEXTAREA' ? 'textareaLabel' : 'inputLabel', for: id, text: label }),
+            input,
+            description ? h('div', { class: 'fieldDescription', text: description }) : null);
+        }
+
+        function textInput(value, onchange, attrs) {
+          var input = h('input', Object.assign({ type: 'text', class: 'emby-input' }, attrs || {}));
+          input.value = value === null || value === undefined ? '' : value;
+          input.addEventListener('input', function () { onchange(input.value); });
+          return input;
+        }
+
+        function listInput(values, separator, onchange, rows) {
+          var input = rows
+            ? h('textarea', { class: 'emby-textarea', rows: String(rows), spellcheck: 'false' })
+            : h('input', { type: 'text', class: 'emby-input' });
+          input.value = (values || []).join(separator === '\n' ? '\n' : ', ');
+          input.addEventListener('input', function () {
+            onchange(input.value.split(separator === '\n' ? /\n/ : /,/).map(function (x) { return x.trim(); }).filter(Boolean));
+          });
+          return input;
+        }
+
+        function yearInput(value, onchange) {
+          var input = h('input', { type: 'number', class: 'emby-input', min: '1880', max: '2100' });
+          input.value = value || '';
+          input.addEventListener('input', function () { onchange(input.value ? parseInt(input.value, 10) : null); });
+          return input;
+        }
+
+        // ---------------------------------------------------------- rendering
+
+        function summaryOf(entry) {
+          var m = entry.value;
+          var period = m.YearFrom || m.YearTo ? (m.YearFrom || '…') + '–' + (m.YearTo || '…') : '';
+          var badge = !entry.builtIn ? 'Added' : entry.hidden ? 'Hidden' : isModified(entry) ? 'Edited' : null;
+          return h('summary', null,
+            h('span', { class: 'cin-movement-name', text: m.Name || m.Id || 'New movement' }),
+            h('span', { class: 'cin-movement-meta', text: [period, (m.Countries || []).join(', ')].filter(Boolean).join(' · ') }),
+            badge ? h('span', { class: 'cin-badge', text: badge }) : null);
+        }
+
+        function translationsEditor(entry, refresh) {
+          var container = h('div');
+
+          function draw() {
+            container.replaceChildren(h('h4', { text: 'Translations' }));
+            (entry.value.Translations || []).forEach(function (t, i) {
+              container.appendChild(h('div', { class: 'cin-translation' },
+                field('Language', textInput(t.Language, function (v) { t.Language = v; refresh(); }, { placeholder: 'fr' })),
+                field('Name', textInput(t.Name, function (v) { t.Name = v; refresh(); })),
+                field('Description', textInput(t.Description, function (v) { t.Description = v; refresh(); })),
+                h('button', {
+                  type: 'button', class: 'raised emby-button', 'aria-label': 'Remove this translation',
+                  onclick: function () { entry.value.Translations.splice(i, 1); draw(); refresh(); }
+                }, h('span', { text: 'Remove' }))));
+            });
+            container.appendChild(h('button', {
+              type: 'button', class: 'raised emby-button',
+              onclick: function () {
+                entry.value.Translations = (entry.value.Translations || []).concat([{ Language: '', Name: '', Description: '' }]);
+                draw();
+              }
+            }, h('span', { text: 'Add a translation' })));
+          }
+
+          draw();
+          return container;
+        }
+
+        function movementCard(entry, open) {
+          var details = h('details', { class: 'cin-movement', 'data-hidden': entry.hidden ? 'true' : 'false' });
+          details.open = !!open;
+          var summary = summaryOf(entry);
+          var m = entry.value;
+
+          // Update the summary in place so typing does not collapse the card.
+          function refresh() {
+            var next = summaryOf(entry);
+            details.replaceChild(next, summary);
+            summary = next;
+            details.setAttribute('data-hidden', entry.hidden ? 'true' : 'false');
+          }
+
+          var actions = h('div', { class: 'cin-actions' });
+          if (entry.builtIn) {
+            actions.appendChild(h('button', {
+              type: 'button', class: 'raised emby-button',
+              onclick: function () { entry.hidden = !entry.hidden; render(entries.indexOf(entry)); }
+            }, h('span', { text: entry.hidden ? 'Show in the tab' : 'Hide from the tab' })));
+            if (isModified(entry)) {
+              actions.appendChild(h('button', {
+                type: 'button', class: 'raised emby-button',
+                onclick: function () { entry.value = clone(entry.builtIn); render(entries.indexOf(entry)); }
+              }, h('span', { text: 'Restore the built-in version' })));
+            }
+          } else {
+            actions.appendChild(h('button', {
+              type: 'button', class: 'raised emby-button',
+              onclick: function () { entries.splice(entries.indexOf(entry), 1); render(); }
+            }, h('span', { text: 'Delete' })));
+          }
+
+          details.appendChild(summary);
+          details.appendChild(h('div', { class: 'cin-movement-body' },
+            entry.builtIn
+              ? h('p', { class: 'fieldDescription', text: 'Built-in movement "' + m.Id + '".' })
+              : field('Id', textInput(m.Id, function (v) { m.Id = v; refresh(); }, { placeholder: 'shaw-brothers' }), 'Used in links. Letters, digits and dashes.'),
+            field('Name', textInput(m.Name, function (v) { m.Name = v; refresh(); })),
+            field('Description', textInput(m.Description, function (v) { m.Description = v; refresh(); })),
+            h('div', { class: 'cin-row' },
+              field('From year', yearInput(m.YearFrom, function (v) { m.YearFrom = v; refresh(); })),
+              field('To year', yearInput(m.YearTo, function (v) { m.YearTo = v; refresh(); })),
+              field('Countries', listInput(m.Countries, ',', function (v) { m.Countries = v; refresh(); }), 'Comma separated: HK, Japan, FR.')),
+            field('Directors', listInput(m.Directors, '\n', function (v) { m.Directors = v; refresh(); }, 6),
+              'One per line: a name, tmdb:25236, or both as "Johnnie To (tmdb:25236)".'),
+            h('div', { class: 'cin-row' },
+              field('Genres', listInput(m.Genres, ',', function (v) { m.Genres = v; refresh(); }), 'Comma separated, as your library names them.'),
+              field('Tags', listInput(m.Tags, ',', function (v) { m.Tags = v; refresh(); }), 'Comma separated.'),
+              field('TMDB film ids', listInput(m.TmdbIds, ',', function (v) { m.TmdbIds = v; refresh(); }), 'Films included whatever the rules.')),
+            translationsEditor(entry, refresh),
+            actions));
+          return details;
+        }
+
+        function render(openIndex) {
+          list.replaceChildren.apply(list, entries.map(function (entry, i) { return movementCard(entry, i === openIndex); }));
+        }
+
+        // ---------------------------------------------------------- state
+
+        function load(config, builtIns) {
+          var custom = {};
+          (config.CustomMovements || []).forEach(function (m) { custom[(m.Id || '').toLowerCase()] = m; });
+          var hidden = (config.HiddenMovements || []).map(function (id) { return id.toLowerCase(); });
+
+          entries = builtIns.map(function (b) {
+            var key = b.Id.toLowerCase();
+            var value = custom[key] ? clone(custom[key]) : clone(b);
+            delete custom[key];
+            return { builtIn: b, value: value, hidden: hidden.indexOf(key) >= 0 };
+          });
+          Object.keys(custom).forEach(function (key) {
+            entries.push({ builtIn: null, value: clone(custom[key]), hidden: false });
+          });
+          render();
+        }
+
+        function idOf(entry) {
+          return entry.builtIn ? entry.builtIn.Id : (entry.value.Id || slug(entry.value.Name));
+        }
+
+        function customMovements() {
+          return entries
+            .filter(function (entry) { return !entry.builtIn || isModified(entry); })
+            .map(function (entry) {
+              var m = clone(entry.value);
+              m.Id = idOf(entry);
+              m.Translations = (m.Translations || []).filter(function (t) { return t.Language && t.Name; });
+              return m;
+            });
+        }
+
+        function hiddenMovements() {
+          return entries.filter(function (entry) { return entry.builtIn && entry.hidden; }).map(idOf);
+        }
+
+        // An added movement may not reuse a built-in id: it would silently replace the built-in.
+        function validate() {
+          var seen = {};
+          for (var i = 0; i < entries.length; i++) {
+            var entry = entries[i];
+            var m = entry.value;
+            var id = idOf(entry);
+            if (!id) {
+              return 'Every added movement needs a name or an id.';
+            }
+
+            if (!entry.builtIn && !/^[A-Za-z0-9-]+$/.test(id)) {
+              return 'The id "' + id + '" may only contain letters, digits and dashes.';
+            }
+
+            if (seen[id.toLowerCase()]) {
+              return 'Two movements share the id "' + id + '".';
+            }
+
+            seen[id.toLowerCase()] = true;
+            if (m.YearFrom && m.YearTo && m.YearFrom > m.YearTo) {
+              return '"' + (m.Name || id) + '" ends before it starts.';
+            }
+          }
+
+          return null;
+        }
+
+        // ---------------------------------------------------------- events
+
+        function reload() {
           Dashboard.showLoadingMsg();
-          ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+          return Promise.all([
+            ApiClient.getPluginConfiguration(pluginId),
+            ApiClient.getJSON(ApiClient.getUrl('Cinematheque/Movements/Defaults'))
+          ]).then(function (results) {
+            var config = results[0];
             page.querySelector('#ActorsPerFilm').value = config.ActorsPerFilm;
             page.querySelector('#MinActorFilms').value = config.MinActorFilms;
             page.querySelector('#MinDirectorFilms').value = config.MinDirectorFilms;
-            showMovements(config.CustomMovements);
+            load(config, results[1]);
+          }).finally(function () {
             Dashboard.hideLoadingMsg();
           });
+        }
+
+        page.addEventListener('pageshow', reload);
+
+        page.querySelector('#AddMovement').addEventListener('click', function () {
+          entries.push({ builtIn: null, value: { Id: '', Name: '', Description: '', Countries: [], Directors: [], Genres: [], Tags: [], TmdbIds: [], Translations: [] }, hidden: false });
+          render(entries.length - 1);
         });
 
-        // Built-ins come from the plugin itself: restoring them means dropping your changes.
-        page.querySelector('#ResetMovements').addEventListener('click', function () {
-          showMovements([]);
-          page.dataset.resetHidden = 'true';
+        page.querySelector('#ExportMovements').addEventListener('click', function () {
+          page.querySelector('#MovementsJson').value = JSON.stringify(customMovements(), null, 2);
+        });
+
+        page.querySelector('#ImportMovements').addEventListener('click', function () {
+          var imported;
+          try {
+            imported = JSON.parse(page.querySelector('#MovementsJson').value || '[]');
+            if (!Array.isArray(imported)) {
+              throw new Error('The JSON must be an array of movements.');
+            }
+          } catch (err) {
+            error.textContent = err.message;
+            error.hidden = false;
+            return;
+          }
+
+          error.hidden = true;
+          var byId = {};
+          imported.forEach(function (m) { byId[(m.Id || '').toLowerCase()] = m; });
+          entries = entries
+            .filter(function (entry) { return entry.builtIn; })
+            .map(function (entry) {
+              var key = entry.builtIn.Id.toLowerCase();
+              var value = byId[key] ? clone(byId[key]) : clone(entry.builtIn);
+              delete byId[key];
+              return { builtIn: entry.builtIn, value: value, hidden: entry.hidden };
+            })
+            .concat(Object.keys(byId).map(function (key) { return { builtIn: null, value: clone(byId[key]), hidden: false }; }));
+          render();
         });
 
         form.addEventListener('submit', function (e) {
           e.preventDefault();
 
-          var list;
-          try {
-            list = parseMovements();
-            error.hidden = true;
-          } catch (err) {
-            error.textContent = err.message;
+          var problem = validate();
+          if (problem) {
+            error.textContent = problem;
             error.hidden = false;
-            movements.focus();
+            error.scrollIntoView({ block: 'center' });
             return false;
           }
 
+          error.hidden = true;
           Dashboard.showLoadingMsg();
           ApiClient.getPluginConfiguration(pluginId).then(function (config) {
             config.ActorsPerFilm = parseInt(page.querySelector('#ActorsPerFilm').value, 10);
             config.MinActorFilms = parseInt(page.querySelector('#MinActorFilms').value, 10);
             config.MinDirectorFilms = parseInt(page.querySelector('#MinDirectorFilms').value, 10);
-            config.CustomMovements = list;
-            if (page.dataset.resetHidden === 'true') {
-              config.HiddenMovements = [];
-              delete page.dataset.resetHidden;
-            }
+            config.CustomMovements = customMovements();
+            config.HiddenMovements = hiddenMovements();
             return ApiClient.updatePluginConfiguration(pluginId, config);
           }).then(function (result) {
             Dashboard.processPluginConfigurationUpdateResult(result);
+            return reload();
           });
 
           return false;
