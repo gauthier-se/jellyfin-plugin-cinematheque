@@ -30,6 +30,13 @@ by national cinema and by film movement.
   matched against your library by country, period and director. Administrators can edit
   them or add their own.
 
+- **Your progress.** Every director, actor, country and movement shows how many of its films
+  you have watched, posters you have seen carry a check mark, and lists can be narrowed to the
+  films you have not seen yet.
+- **Pick a film for me.** One click draws a film you have not seen from the list on screen.
+- **Collections, if you want them.** Each movement can also become a Jellyfin collection, so it
+  reaches the TV and mobile apps that do not load the tab. Off by default.
+
 Everything respects each user's library access and parental controls. The interface is
 available in English and French, and country names follow the user's language.
 

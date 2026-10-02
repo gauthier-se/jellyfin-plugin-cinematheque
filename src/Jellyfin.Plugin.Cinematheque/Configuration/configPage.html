@@ -80,6 +80,22 @@
             </details>
           </div>
 
+          <div class="verticalSection">
+            <h3 class="sectionTitle">Collections</h3>
+            <div class="checkboxContainer checkboxContainer-withDescription">
+              <label class="emby-checkbox-label">
+                <input id="SyncCollections" type="checkbox" is="emby-checkbox" />
+                <span>Create a collection for each movement</span>
+              </label>
+              <div class="fieldDescription checkboxFieldDescription">
+                Movements then also appear in the TV and mobile apps, which do not show the Cinematheque tab. Collections
+                are named in the server's display language and follow the movement's rules after every library scan:
+                films added to them by hand are removed. Cinematheque never deletes a collection; when a movement is
+                hidden or this option is turned off, its collection stays as it is.
+              </div>
+            </div>
+          </div>
+
           <div>
             <button is="emby-button" type="submit" class="raised button-submit block emby-button">
               <span>Save</span>
@@ -376,6 +392,7 @@
             page.querySelector('#ActorsPerFilm').value = config.ActorsPerFilm;
             page.querySelector('#MinActorFilms').value = config.MinActorFilms;
             page.querySelector('#MinDirectorFilms').value = config.MinDirectorFilms;
+            page.querySelector('#SyncCollections').checked = !!config.SyncCollections;
             load(config, results[1]);
           }).finally(function () {
             Dashboard.hideLoadingMsg();
@@ -438,6 +455,7 @@
             config.ActorsPerFilm = parseInt(page.querySelector('#ActorsPerFilm').value, 10);
             config.MinActorFilms = parseInt(page.querySelector('#MinActorFilms').value, 10);
             config.MinDirectorFilms = parseInt(page.querySelector('#MinDirectorFilms').value, 10);
+            config.SyncCollections = page.querySelector('#SyncCollections').checked;
             config.CustomMovements = customMovements();
             config.HiddenMovements = hiddenMovements();
             return ApiClient.updatePluginConfiguration(pluginId, config);

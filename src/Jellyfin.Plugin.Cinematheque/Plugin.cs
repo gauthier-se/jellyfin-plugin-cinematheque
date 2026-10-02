@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Jellyfin.Plugin.Cinematheque.Configuration;
+using Jellyfin.Plugin.Cinematheque.Library;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
+using MediaBrowser.Model.Tasks;
 
 namespace Jellyfin.Plugin.Cinematheque;
 
@@ -24,7 +26,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     /// </summary>
     /// <param name="applicationPaths">Instance of the <see cref="IApplicationPaths"/> interface.</param>
     /// <param name="xmlSerializer">Instance of the <see cref="IXmlSerializer"/> interface.</param>
-    public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer)
+    /// <param name="taskManager">Instance of the <see cref="ITaskManager"/> interface.</param>
+    public Plugin(IApplicationPaths applicationPaths, IXmlSerializer xmlSerializer, ITaskManager taskManager)
         : base(applicationPaths, xmlSerializer)
     {
         Instance = this;
@@ -32,6 +35,15 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         {
             SaveConfiguration();
         }
+
+        // Saving the settings may turn collections on or change movements: sync right away.
+        ConfigurationChanged += (_, _) =>
+        {
+            if (Configuration.SyncCollections)
+            {
+                taskManager.QueueIfNotRunning<CollectionSyncTask>();
+            }
+        };
     }
 
     /// <inheritdoc />

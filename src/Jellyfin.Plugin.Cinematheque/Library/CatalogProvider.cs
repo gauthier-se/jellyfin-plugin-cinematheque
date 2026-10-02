@@ -131,6 +131,13 @@ public sealed class CatalogProvider : IDisposable
         }
     }
 
+    /// <summary>
+    /// Builds a catalog of every film on the server, regardless of user access. Not cached: it
+    /// feeds background work such as collection sync, never a user's request.
+    /// </summary>
+    /// <returns>The catalog.</returns>
+    public FilmCatalog BuildServerCatalog() => Build(null);
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -154,7 +161,7 @@ public sealed class CatalogProvider : IDisposable
             IsPlayed = true,
         }).ToHashSet();
 
-    private FilmCatalog Build(User user)
+    private FilmCatalog Build(User? user)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
         PluginConfiguration configuration = Configuration;
@@ -218,8 +225,8 @@ public sealed class CatalogProvider : IDisposable
 
         FilmCatalog catalog = new FilmCatalog(films, configuration.GetEffectiveMovements());
         _logger.LogDebug(
-            "Built the Cinematheque catalog for user {UserId}: {FilmCount} films in {ElapsedMilliseconds} ms",
-            user.Id,
+            "Built the Cinematheque catalog for {UserId}: {FilmCount} films in {ElapsedMilliseconds} ms",
+            user?.Id.ToString() ?? "the server",
             films.Count,
             stopwatch.ElapsedMilliseconds);
         return catalog;

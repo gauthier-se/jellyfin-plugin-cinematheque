@@ -48,6 +48,18 @@ public class PluginConfiguration : BasePluginConfiguration
     public string[] HiddenMovements { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets a value indicating whether each movement gets a Jellyfin collection, so the
+    /// movements also show up in apps that do not load the Cinematheque tab.
+    /// </summary>
+    public bool SyncCollections { get; set; }
+
+    /// <summary>
+    /// Gets or sets the collections the plugin created. It never deletes them: a collection whose
+    /// movement is hidden or removed, or whose sync is turned off, is simply left alone.
+    /// </summary>
+    public MovementCollectionLink[] ManagedCollections { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets the full movement list saved by version 0.1. Only read to migrate it.
     /// </summary>
     public MovementDefinition[] Movements { get; set; } = [];
