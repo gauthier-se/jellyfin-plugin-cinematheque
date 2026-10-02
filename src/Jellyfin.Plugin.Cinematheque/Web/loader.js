@@ -1,8 +1,9 @@
 /*
  * Cinematheque loader, injected into jellyfin-web's index.html by File Transformation.
  *
- * It does two things and stays small: it adds a "Cinematheque" entry next to Favorites in
- * whichever layout is active, and it loads the real app the first time the user opens it.
+ * It stays small: it adds a "Cinematheque" entry next to Favorites in whichever layout is
+ * active and a tile to "My Media" on the home page, and it loads the real app the first time the
+ * user opens it.
  * The view lives on the home route (#/home?cinematheque=...), so the header, drawer and
  * back button keep working without registering a route in jellyfin-web.
  */
@@ -102,6 +103,91 @@
     home.after(entry);
   }
 
+  // "My Media" on the home page: library tiles. Home Screen Sections and themes render them their
+  // own way, so the tile is a clone of whatever library tile is there, with its link, title and
+  // image swapped. Only the web client gets it; TV and mobile apps reach movements through
+  // collections instead.
+  var TILE_ATTR = 'data-cinematheque-tile';
+  var tileImage = null;
+
+  function findLibraryTile() {
+    var tiles = document.querySelectorAll('.card[data-type="CollectionFolder"], .card[data-type="UserView"]');
+    for (var i = tiles.length - 1; i >= 0; i--) {
+      if (!tiles[i].closest('#cinematheque-root') && tiles[i].parentElement) {
+        return tiles[i];
+      }
+    }
+
+    return null;
+  }
+
+  function addHomeTile() {
+    var template = findLibraryTile();
+    if (!template || template.parentElement.querySelector('[' + TILE_ATTR + ']')) {
+      return;
+    }
+
+    var tile = template.cloneNode(true);
+    tile.setAttribute(TILE_ATTR, '');
+    ['data-id', 'data-type', 'data-collectiontype', 'data-action', 'data-isfolder', 'data-index'].forEach(function (name) {
+      tile.removeAttribute(name);
+    });
+
+    // Strip jellyfin-web's own click handling, which would open the cloned library.
+    tile.querySelectorAll('*').forEach(function (el) {
+      el.classList.remove('itemAction');
+      ['data-action', 'data-id', 'data-type', 'data-isfolder'].forEach(function (name) { el.removeAttribute(name); });
+      if (el.tagName === 'A') {
+        el.setAttribute('href', HREF);
+      }
+    });
+    tile.querySelectorAll('.cardOverlayButton, .cardOverlayButton-br, .cardIndicators, .countIndicator').forEach(function (el) { el.remove(); });
+    tile.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      location.hash = HREF.slice(1);
+    }, true);
+
+    var text = tile.querySelector('.cardText bdi') || tile.querySelector('.cardText');
+    if (text) {
+      text.textContent = label();
+    }
+
+    var image = tile.querySelector('.cardImageContainer');
+    if (image) {
+      image.classList.remove('lazy');
+      image.removeAttribute('data-src');
+      image.setAttribute('aria-label', label());
+      image.querySelectorAll('.cardImageIcon, canvas').forEach(function (el) { el.remove(); });
+      image.style.backgroundImage = '';
+      setTileImage(image);
+    }
+
+    template.parentElement.appendChild(tile);
+  }
+
+  // One backdrop per page load: re-renders keep the same picture.
+  function setTileImage(element) {
+    if (!tileImage) {
+      tileImage = ApiClient.getJSON(ApiClient.getUrl('Users/' + ApiClient.getCurrentUserId() + '/Items', {
+        IncludeItemTypes: 'Movie',
+        Recursive: true,
+        ImageTypes: 'Backdrop',
+        SortBy: 'Random',
+        Limit: 1
+      })).then(function (result) {
+        var film = result.Items && result.Items[0];
+        return film ? ApiClient.getScaledImageUrl(film.Id, { type: 'Backdrop', maxWidth: 800, quality: 90 }) : null;
+      }).catch(function () { return null; });
+    }
+
+    tileImage.then(function (url) {
+      if (url) {
+        element.style.backgroundImage = 'url("' + url + '")';
+      }
+    });
+  }
+
   // The header button keeps its label in a trailing text node after the icon span.
   function setText(element, text) {
     var node = Array.prototype.slice.call(element.childNodes).reverse().find(function (n) {
@@ -169,6 +255,10 @@
     pending = false;
     addModernEntries();
     addLegacyEntries();
+    if (typeof ApiClient !== 'undefined' && ApiClient.getCurrentUserId()) {
+      addHomeTile();
+    }
+
     markSelected();
 
     if (isActive()) {
@@ -190,7 +280,7 @@
   // React and the legacy view manager both rebuild the header and pages on navigation.
   new MutationObserver(function (mutations) {
     var ours = mutations.every(function (m) {
-      return m.target.closest && m.target.closest('#cinematheque-root, [' + ENTRY_ATTR + ']');
+      return m.target.closest && m.target.closest('#cinematheque-root, [' + ENTRY_ATTR + '], [' + TILE_ATTR + ']');
     });
     if (!ours) {
       schedule();
