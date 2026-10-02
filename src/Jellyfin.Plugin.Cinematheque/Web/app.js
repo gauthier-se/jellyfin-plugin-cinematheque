@@ -265,10 +265,18 @@
     }
 
     var url = ApiClient.getUrl('Cinematheque/' + path, params || {});
+    var now = Date.now();
     var hit = cache.get(url);
-    if (hit && Date.now() - hit.time < CACHE_MS) {
+    if (hit && now - hit.time < CACHE_MS) {
       return hit.promise;
     }
+
+    // Typing a search caches one list per keystroke: forget the expired ones as we go.
+    cache.forEach(function (entry, key) {
+      if (now - entry.time >= CACHE_MS) {
+        cache.delete(key);
+      }
+    });
 
     var promise = ApiClient.getJSON(url).catch(function (err) {
       cache.delete(url);
