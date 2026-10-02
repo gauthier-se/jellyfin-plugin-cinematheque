@@ -6,6 +6,19 @@ four-part plugin versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- "Show more" no longer fails past 480 people or films. It adds the next page to the list
+  instead of loading the whole list again.
+- A movement collection is no longer left out of sync for good when a sync fails or is
+  cancelled halfway. Collections are recorded as soon as they are created, and one failing
+  movement no longer stops the others.
+
+### Security
+
+- Signing out and in as another user in the same browser tab no longer shows the previous
+  user's lists, or a film from their libraries on the My Media tile.
+
 ## [0.2.0] - 2026-10-02
 
 ### Added
