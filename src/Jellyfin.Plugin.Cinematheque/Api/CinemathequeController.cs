@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Net.Mime;
+using System.Security.Cryptography;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.Cinematheque.Catalog;
 using Jellyfin.Plugin.Cinematheque.Configuration;
@@ -179,13 +180,7 @@ public class CinemathequeController : ControllerBase
     /// <summary>
     /// Lists films, narrowed by any combination of filters.
     /// </summary>
-    /// <param name="country">A country code.</param>
-    /// <param name="person">A person key, such as <c>tmdb:25236</c>, or a name.</param>
-    /// <param name="role">The role the person is credited in, such as <c>directors</c>. Any role when unset.</param>
-    /// <param name="director">Deprecated: a director name. Use <paramref name="person"/> and <paramref name="role"/>.</param>
-    /// <param name="actor">Deprecated: an actor name. Use <paramref name="person"/> and <paramref name="role"/>.</param>
-    /// <param name="movement">A movement id.</param>
-    /// <param name="decade">A decade, such as 1960.</param>
+    /// <param name="query">The filters.</param>
     /// <param name="unseen">Only the films the user has not watched.</param>
     /// <param name="startIndex">The index of the first result.</param>
     /// <param name="limit">The maximum number of results.</param>
@@ -193,39 +188,23 @@ public class CinemathequeController : ControllerBase
     [HttpGet("Films")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<FilmPageDto> GetFilms(
-        [FromQuery] string? country,
-        [FromQuery] string? person,
-        [FromQuery] string? role,
-        [FromQuery] string? director,
-        [FromQuery] string? actor,
-        [FromQuery] string? movement,
-        [FromQuery] int? decade,
+        [FromQuery] FilmQuery query,
         [FromQuery] bool unseen = false,
         [FromQuery, Range(0, int.MaxValue)] int startIndex = 0,
         [FromQuery, Range(1, MaxPageSize)] int limit = 100)
     {
+        ArgumentNullException.ThrowIfNull(query);
+
         User? user = GetUser();
         if (user is null)
         {
             return Unauthorized();
         }
 
-        PersonRole? personRole = ParseRole(role);
-        if (string.IsNullOrWhiteSpace(person) && !string.IsNullOrWhiteSpace(director))
-        {
-            (person, personRole) = (director, PersonRole.Director);
-        }
-        else if (string.IsNullOrWhiteSpace(person) && !string.IsNullOrWhiteSpace(actor))
-        {
-            (person, personRole) = (actor, PersonRole.Actor);
-        }
-
-        FilmCatalog catalog = _catalogProvider.GetCatalog(user);
-
         // Decades are computed before the decade filter so the client can switch between them.
-        Film[] unfiltered = catalog.Filter(new FilmFilter(country, person, personRole, movement)).ToArray();
+        Film[] unfiltered = _catalogProvider.GetCatalog(user).Filter(ToFilter(query)).ToArray();
         DecadeDto[] decades = FilmCatalog.CountByDecade(unfiltered).Select(d => new DecadeDto(d.Decade, d.FilmCount)).ToArray();
-        Film[] films = decade is null ? unfiltered : unfiltered.Where(f => f.Decade == decade).ToArray();
+        Film[] films = query.Decade is null ? unfiltered : unfiltered.Where(f => f.Decade == query.Decade).ToArray();
 
         IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
         int seenCount = films.Count(f => seen.Contains(f.Id));
@@ -235,13 +214,69 @@ public class CinemathequeController : ControllerBase
         }
 
         return Ok(new FilmPageDto(
-            films.Skip(startIndex).Take(limit)
-                .Select(f => new FilmDto(f.Id, f.Name, f.Year, f.Countries.Select(ToDto).ToArray(), f.Directors.Select(d => d.Name).ToArray(), seen.Contains(f.Id)))
-                .ToArray(),
+            films.Skip(startIndex).Take(limit).Select(f => ToDto(f, seen)).ToArray(),
             films.Length,
             seenCount,
             decades));
     }
+
+    /// <summary>
+    /// Picks a film at random among the ones the filters select, preferring those the user has not
+    /// watched yet.
+    /// </summary>
+    /// <param name="query">The filters.</param>
+    /// <returns>A film, or 404 when the filters select nothing.</returns>
+    [HttpGet("Films/Random")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<FilmDto> GetRandomFilm([FromQuery] FilmQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        User? user = GetUser();
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        Film[] films = _catalogProvider.GetCatalog(user).Filter(ToFilter(query))
+            .Where(f => query.Decade is null || f.Decade == query.Decade)
+            .ToArray();
+        IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
+        Film[] unseen = films.Where(f => !seen.Contains(f.Id)).ToArray();
+        Film[] pool = unseen.Length > 0 ? unseen : films;
+        if (pool.Length == 0)
+        {
+            return NotFound();
+        }
+
+        return Ok(ToDto(pool[RandomNumberGenerator.GetInt32(pool.Length)], seen));
+    }
+
+    private static FilmFilter ToFilter(FilmQuery query)
+    {
+        string? person = query.Person;
+        PersonRole? role = ParseRole(query.Role);
+        if (string.IsNullOrWhiteSpace(person) && !string.IsNullOrWhiteSpace(query.Director))
+        {
+            (person, role) = (query.Director, PersonRole.Director);
+        }
+        else if (string.IsNullOrWhiteSpace(person) && !string.IsNullOrWhiteSpace(query.Actor))
+        {
+            (person, role) = (query.Actor, PersonRole.Actor);
+        }
+
+        return new FilmFilter(query.Country, person, role, query.Movement);
+    }
+
+    private static FilmDto ToDto(Film film, IReadOnlySet<Guid> seen)
+        => new FilmDto(
+            film.Id,
+            film.Name,
+            film.Year,
+            film.Countries.Select(ToDto).ToArray(),
+            film.Directors.Select(d => d.Name).ToArray(),
+            seen.Contains(film.Id));
 
     private static CountryDto ToDto(Catalog.Country country) => new CountryDto(country.Code, country.Name);
 

@@ -108,6 +108,7 @@ The tab is a client for a small REST API, available to any authenticated user:
 | `GET /Cinematheque/People/{role}` | People in a role (`directors`, `actors`, `writers`), with `search`, `minFilms`, `sortBy` (`count` or `name`), `startIndex`, `limit` |
 | `GET /Cinematheque/Countries` | Countries with film counts, decades and leading directors |
 | `GET /Cinematheque/Movements` | Movements with film counts |
+| `GET /Cinematheque/Films/Random` | One film picked among the same filters, preferring films the user has not watched |
 | `GET /Cinematheque/Films` | Films filtered by `country`, `person` (a key such as `tmdb:25236`, or a name) with `role`, `movement`, `decade` |
 
 ## How it works

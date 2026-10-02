@@ -41,7 +41,8 @@
       defaultMin: 'Default minimum',
       seen: '{0} seen',
       unseenOnly: 'Not seen yet',
-      seenBadge: 'Seen'
+      seenBadge: 'Seen',
+      pick: 'Pick a film for me'
     },
     fr: {
       title: 'Cinémathèque',
@@ -69,7 +70,8 @@
       defaultMin: 'Minimum par défaut',
       seen: '{0} vus',
       unseenOnly: 'Pas encore vus',
-      seenBadge: 'Vu'
+      seenBadge: 'Vu',
+      pick: 'Programme-moi un film'
     }
   };
 
@@ -414,7 +416,12 @@
               href: href(Object.assign({}, route, { unseen: route.unseen ? null : 1 })),
               'aria-pressed': route.unseen ? 'true' : 'false',
               text: t('unseenOnly')
-            })),
+            }),
+            total ? h('button', {
+              class: 'cin-chip cin-chip-small cin-pick',
+              type: 'button',
+              onclick: function () { pickFilm(filter, route.decade); }
+            }, h('span', { class: 'material-icons', 'aria-hidden': 'true', text: 'shuffle' }), t('pick')) : null),
           filmGrid(page.Items),
           more || '');
         return section;
@@ -422,6 +429,18 @@
     }
 
     return load();
+  }
+
+  // Never cached: each click must draw again.
+  function pickFilm(filter, decade) {
+    var params = Object.assign({}, filter);
+    if (decade) {
+      params.decade = decade;
+    }
+
+    ApiClient.getJSON(ApiClient.getUrl('Cinematheque/Films/Random', params)).then(function (film) {
+      location.hash = itemHref(film.Id).slice(1);
+    }).catch(function (err) { console.error('Cinematheque:', err); });
   }
 
   // ---------------------------------------------------------------- views

@@ -347,6 +347,18 @@
   background: color-mix(in srgb, var(--cin-accent) 22%, transparent);
 }
 
+.cin-pick {
+  margin-left: auto;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cin-pick .material-icons {
+  font-size: 1.1rem;
+}
+
 .cin-chip-count {
   color: var(--cin-muted);
   font-size: 0.8rem;
