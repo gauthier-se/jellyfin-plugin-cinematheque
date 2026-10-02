@@ -1,5 +1,7 @@
 # Cinematheque
 
+<p align="center"><img src="docs/brand/logo.png" alt="Cinematheque" width="560"></p>
+
 A Jellyfin plugin for film lovers. It adds a **Cinematheque** tab to the web client to
 browse your film library the way a cinematheque programs it: by director, by actor,
 by national cinema and by film movement.

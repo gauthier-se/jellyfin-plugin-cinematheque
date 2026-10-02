@@ -12,6 +12,8 @@ description: >
   New Wave or Italian Neorealism. Requires the File Transformation plugin for the tab.
 category: "General"
 owner: "gauthier-se"
+# Shown in the plugin catalog and on the dashboard; Jellyfin downloads it at install time.
+imageUrl: "https://raw.githubusercontent.com/gauthier-se/jellyfin-plugin-cinematheque/main/docs/brand/logo.png"
 artifacts:
   - "Jellyfin.Plugin.Cinematheque.dll"
 changelog: >

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#151a24"/>
+      <stop offset="1" stop-color="#0b0e14"/>
+    </linearGradient>
+    <linearGradient id="reel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#aa5cc3"/>
+      <stop offset="1" stop-color="#00a4dc"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg)"/>
+
+  <!-- Film strip, drawn with plain shapes: a band, sprocket holes, three frames. -->
+  <g transform="translate(96 230) rotate(-8 130 130)">
+    <rect x="0" y="40" width="260" height="180" rx="22" fill="url(#reel)"/>
+    <g fill="#0b0e14">
+      <rect x="18" y="54" width="22" height="16" rx="4"/>
+      <rect x="62" y="54" width="22" height="16" rx="4"/>
+      <rect x="106" y="54" width="22" height="16" rx="4"/>
+      <rect x="150" y="54" width="22" height="16" rx="4"/>
+      <rect x="194" y="54" width="22" height="16" rx="4"/>
+      <rect x="18" y="190" width="22" height="16" rx="4"/>
+      <rect x="62" y="190" width="22" height="16" rx="4"/>
+      <rect x="106" y="190" width="22" height="16" rx="4"/>
+      <rect x="150" y="190" width="22" height="16" rx="4"/>
+      <rect x="194" y="190" width="22" height="16" rx="4"/>
+      <rect x="18" y="84" width="64" height="92" rx="8" opacity="0.85"/>
+      <rect x="98" y="84" width="64" height="92" rx="8" opacity="0.85"/>
+      <rect x="178" y="84" width="64" height="92" rx="8" opacity="0.85"/>
+    </g>
+    <path d="M118 108 L146 130 L118 152 Z" fill="url(#reel)"/>
+  </g>
+
+  <text x="412" y="398" font-family="Inter" font-weight="700" font-size="112" letter-spacing="-2" fill="#f4f5f7">Cinematheque</text>
+</svg>
