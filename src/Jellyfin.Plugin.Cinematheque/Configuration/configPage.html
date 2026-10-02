@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Cinematheque</title>
+</head>
+<body>
+  <div id="CinemathequeConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-textarea">
+    <div data-role="content">
+      <div class="content-primary">
+        <form id="CinemathequeConfigForm">
+          <div class="verticalSection">
+            <h2 class="sectionTitle">Cinematheque</h2>
+            <p>
+              Browse your films by director, actor, country and film movement. The tab in the web client needs the
+              <a is="emby-linkbutton" class="button-link" href="https://github.com/IAmParadox27/jellyfin-plugin-file-transformation" target="_blank" rel="noopener noreferrer">File Transformation</a>
+              plugin.
+            </p>
+          </div>
+
+          <div class="verticalSection">
+            <h3 class="sectionTitle">People</h3>
+            <div class="inputContainer">
+              <label class="inputLabel inputLabelUnfocused" for="ActorsPerFilm">Actors per film</label>
+              <input id="ActorsPerFilm" name="ActorsPerFilm" type="number" is="emby-input" min="1" max="200" required />
+              <div class="fieldDescription">Only the top of the bill counts, so the actor list shows leading players rather than every extra.</div>
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel inputLabelUnfocused" for="MinActorFilms">Minimum films for an actor</label>
+              <input id="MinActorFilms" name="MinActorFilms" type="number" is="emby-input" min="1" required />
+              <div class="fieldDescription">Default filter of the Actors tab. Users can change it there.</div>
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel inputLabelUnfocused" for="MinDirectorFilms">Minimum films for a director</label>
+              <input id="MinDirectorFilms" name="MinDirectorFilms" type="number" is="emby-input" min="1" required />
+              <div class="fieldDescription">Default filter of the Directors tab. Users can change it there.</div>
+            </div>
+          </div>
+
+          <div class="verticalSection">
+            <h3 class="sectionTitle">Movements</h3>
+            <div class="inputContainer">
+              <label class="textareaLabel" for="Movements">Movements (JSON)</label>
+              <textarea id="Movements" name="Movements" is="emby-textarea" rows="24" spellcheck="false" style="font-family: monospace; font-size: 0.85em;"></textarea>
+              <div class="fieldDescription">
+                A film belongs to a movement when its TMDB id is in <code>TmdbIds</code>, or when it matches every rule that is set:
+                one of the <code>Countries</code> (ISO codes or names), between <code>YearFrom</code> and <code>YearTo</code>,
+                by one of the <code>Directors</code>, with one of the <code>Genres</code> and one of the <code>Tags</code>.
+                Names are compared without accents or punctuation.
+              </div>
+              <div id="MovementsError" class="fieldDescription" style="color: #e57373;" hidden></div>
+            </div>
+            <button id="ResetMovements" is="emby-button" type="button" class="raised emby-button">
+              <span>Restore the default movements</span>
+            </button>
+          </div>
+
+          <div>
+            <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+              <span>Save</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script type="text/javascript">
+      (function () {
+        var pluginId = '6f86a1dd-c4dc-4aa6-a445-8f19be1087c1';
+        var page = document.querySelector('#CinemathequeConfigPage');
+        var form = page.querySelector('#CinemathequeConfigForm');
+        var movements = page.querySelector('#Movements');
+        var error = page.querySelector('#MovementsError');
+
+        function showMovements(list) {
+          movements.value = JSON.stringify(list || [], null, 2);
+        }
+
+        function parseMovements() {
+          var list = JSON.parse(movements.value || '[]');
+          if (!Array.isArray(list)) {
+            throw new Error('The movements must be a JSON array.');
+          }
+
+          list.forEach(function (movement, i) {
+            if (!movement || typeof movement.Id !== 'string' || !movement.Id.trim()) {
+              throw new Error('Movement #' + (i + 1) + ' needs an "Id".');
+            }
+          });
+          return list;
+        }
+
+        page.addEventListener('pageshow', function () {
+          Dashboard.showLoadingMsg();
+          ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+            page.querySelector('#ActorsPerFilm').value = config.ActorsPerFilm;
+            page.querySelector('#MinActorFilms').value = config.MinActorFilms;
+            page.querySelector('#MinDirectorFilms').value = config.MinDirectorFilms;
+            showMovements(config.Movements);
+            Dashboard.hideLoadingMsg();
+          });
+        });
+
+        page.querySelector('#ResetMovements').addEventListener('click', function () {
+          ApiClient.getJSON(ApiClient.getUrl('Cinematheque/Movements/Defaults')).then(showMovements);
+        });
+
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+
+          var list;
+          try {
+            list = parseMovements();
+            error.hidden = true;
+          } catch (err) {
+            error.textContent = err.message;
+            error.hidden = false;
+            movements.focus();
+            return false;
+          }
+
+          Dashboard.showLoadingMsg();
+          ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+            config.ActorsPerFilm = parseInt(page.querySelector('#ActorsPerFilm').value, 10);
+            config.MinActorFilms = parseInt(page.querySelector('#MinActorFilms').value, 10);
+            config.MinDirectorFilms = parseInt(page.querySelector('#MinDirectorFilms').value, 10);
+            config.Movements = list;
+            return ApiClient.updatePluginConfiguration(pluginId, config);
+          }).then(function (result) {
+            Dashboard.processPluginConfigurationUpdateResult(result);
+          });
+
+          return false;
+        });
+      })();
+    </script>
+  </div>
+</body>
+</html>
