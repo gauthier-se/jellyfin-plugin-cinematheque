@@ -311,10 +311,21 @@
 
   window.CinemathequeLoader = { version: version };
 
+  // MUI colours a button through classes it generates from its props, so swapping
+  // MuiButton-colorInherit for MuiButton-colorPrimary does not turn the header entry blue by
+  // itself. These rules do, as jellyfin-web colours the current library: in the theme's primary
+  // colour, tinted on hover.
+  var style = document.createElement('style');
+  style.textContent =
+    'header [' + ENTRY_ATTR + '].MuiButton-colorPrimary{color:var(--jf-palette-primary-main,#00a4dc)}' +
+    'header [' + ENTRY_ATTR + '].MuiButton-colorPrimary:hover{background-color:' +
+    'rgba(var(--jf-palette-primary-mainChannel,0 164 220)/var(--jf-palette-action-hoverOpacity,0.08))}';
+  document.head.appendChild(style);
+
   // React and the legacy view manager both rebuild the header and pages on navigation.
   new MutationObserver(function (mutations) {
     var ours = mutations.every(function (m) {
-      return m.target.closest && m.target.closest('#cinematheque-root, [' + ENTRY_ATTR + '], [' + TILE_ATTR + ']');
+      return m.target.closest && m.target.closest('#cinematheque-root, #cinematheque-bar, [' + ENTRY_ATTR + '], [' + TILE_ATTR + ']');
     });
     if (!ours) {
       schedule();
