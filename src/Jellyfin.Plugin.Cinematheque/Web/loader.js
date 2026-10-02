@@ -110,11 +110,15 @@
   var TILE_ATTR = 'data-cinematheque-tile';
   var tileImage = null;
 
+  // Prefer a library tile over a special view such as Live TV, whose styling may differ.
   function findLibraryTile() {
-    var tiles = document.querySelectorAll('.card[data-type="CollectionFolder"], .card[data-type="UserView"]');
-    for (var i = tiles.length - 1; i >= 0; i--) {
-      if (!tiles[i].closest('#cinematheque-root') && tiles[i].parentElement) {
-        return tiles[i];
+    var selectors = ['.card[data-type="CollectionFolder"]', '.card[data-type="UserView"]'];
+    for (var s = 0; s < selectors.length; s++) {
+      var tiles = document.querySelectorAll(selectors[s]);
+      for (var i = tiles.length - 1; i >= 0; i--) {
+        if (!tiles[i].closest('#cinematheque-root') && tiles[i].parentElement) {
+          return tiles[i];
+        }
       }
     }
 
@@ -127,21 +131,24 @@
       return;
     }
 
+    // Keep data-type, which themes style library tiles by. Drop what jellyfin-web and other
+    // plugins use to find the item behind the card, and the collection type, which some themes
+    // use to swap in their own stock picture.
     var tile = template.cloneNode(true);
     tile.setAttribute(TILE_ATTR, '');
-    ['data-id', 'data-type', 'data-collectiontype', 'data-action', 'data-isfolder', 'data-index'].forEach(function (name) {
+    ['data-id', 'data-serverid', 'data-path', 'data-index', 'data-action', 'data-collectiontype'].forEach(function (name) {
       tile.removeAttribute(name);
     });
-
-    // Strip jellyfin-web's own click handling, which would open the cloned library.
     tile.querySelectorAll('*').forEach(function (el) {
       el.classList.remove('itemAction');
-      ['data-action', 'data-id', 'data-type', 'data-isfolder'].forEach(function (name) { el.removeAttribute(name); });
+      ['data-action', 'data-id', 'data-serverid', 'data-type', 'data-isfolder'].forEach(function (name) { el.removeAttribute(name); });
       if (el.tagName === 'A') {
         el.setAttribute('href', HREF);
       }
     });
-    tile.querySelectorAll('.cardOverlayButton, .cardOverlayButton-br, .cardIndicators, .countIndicator').forEach(function (el) { el.remove(); });
+    tile.querySelectorAll('.cardOverlayButton, .cardOverlayButton-br, .cardIndicators, .countIndicator, .blurhash-canvas, .cardImageIcon').forEach(function (el) {
+      el.remove();
+    });
     tile.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -158,7 +165,6 @@
       image.classList.remove('lazy');
       image.removeAttribute('data-src');
       image.setAttribute('aria-label', label());
-      image.querySelectorAll('.cardImageIcon, canvas').forEach(function (el) { el.remove(); });
       image.style.backgroundImage = '';
       setTileImage(image);
     }
@@ -166,7 +172,11 @@
     template.parentElement.appendChild(tile);
   }
 
-  // One backdrop per page load: re-renders keep the same picture.
+  // A film backdrop under a veil in the logo's colours, so the name themes write over library
+  // tiles stays readable on any picture. Fetched as a blob: URL, which keeps other plugins from
+  // mistaking the tile for that film.
+  var TILE_VEIL = 'linear-gradient(135deg, rgba(110, 45, 140, 0.72), rgba(0, 110, 160, 0.62))';
+
   function setTileImage(element) {
     if (!tileImage) {
       tileImage = ApiClient.getJSON(ApiClient.getUrl('Users/' + ApiClient.getCurrentUserId() + '/Items', {
@@ -177,13 +187,24 @@
         Limit: 1
       })).then(function (result) {
         var film = result.Items && result.Items[0];
-        return film ? ApiClient.getScaledImageUrl(film.Id, { type: 'Backdrop', maxWidth: 800, quality: 90 }) : null;
-      }).catch(function () { return null; });
+        if (!film) {
+          throw new Error('Cinematheque: no backdrop');
+        }
+
+        return ApiClient.fetch({ url: ApiClient.getScaledImageUrl(film.Id, { type: 'Backdrop', maxWidth: 800, quality: 90 }), type: 'GET' });
+      }).then(function (response) {
+        return response.blob();
+      }).then(function (blob) {
+        return URL.createObjectURL(blob);
+      }).catch(function () {
+        return null;
+      });
     }
 
+    element.style.backgroundImage = TILE_VEIL;
     tileImage.then(function (url) {
       if (url) {
-        element.style.backgroundImage = 'url("' + url + '")';
+        element.style.backgroundImage = TILE_VEIL + ', url("' + url + '")';
       }
     });
   }
