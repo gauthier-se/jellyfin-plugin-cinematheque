@@ -1,0 +1,20 @@
+[
+    {
+        "guid": "6f86a1dd-c4dc-4aa6-a445-8f19be1087c1",
+        "name": "Cinematheque",
+        "description": "Cinematheque adds a tab to the Jellyfin web client for film lovers: directors and actors with their filmography in your library, national cinemas (Hong Kong, Japan, Italy...) with a decade breakdown, and curated film movements such as the French New Wave or Italian Neorealism. Requires the File Transformation plugin for the tab.\n",
+        "overview": "Browse your films by director, actor, country and film movement",
+        "owner": "gauthier-se",
+        "category": "General",
+        "versions": [
+            {
+                "version": "0.1.0.0",
+                "changelog": "First release: directors, actors, countries and movements.\n",
+                "targetAbi": "12.1.0.0",
+                "sourceUrl": "https://github.com/gauthier-se/jellyfin-plugin-cinematheque/releases/download/v0.1.0/cinematheque_0.1.0.0.zip",
+                "checksum": "626610bffcad3b3cf337e2a2e04e0448",
+                "timestamp": "2026-10-02T08:07:51Z"
+            }
+        ]
+    }
+]
