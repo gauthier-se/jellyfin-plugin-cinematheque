@@ -15,9 +15,9 @@ by national cinema and by film movement.
 
 ## Features
 
-- **Directors.** Every director in your library with their portrait, number of films,
-  active years and main countries. Open one to see their filmography in your library,
-  oldest first, filterable by decade.
+- **Directors.** Every director in your library, with their portrait and how many of their
+  films you have. Open one to see their active years, the countries they worked in and their
+  filmography in your library, oldest first, filterable by decade.
 - **Actors.** The same for actors. Only the top of the bill counts (10 names per film by
   default), so the list shows leading players rather than every extra.
 - **Screenwriters.** Jean-Claude Carrière, Suso Cecchi d'Amico, Charles Brackett: the same
@@ -31,13 +31,13 @@ by national cinema and by film movement.
   French New Wave, the Japanese New Wave, the Hong Kong New Wave or Taiwan New Cinema,
   matched against your library by country, period and director. Administrators can edit
   them or add their own.
-
 - **Your progress.** Every director, actor, country and movement shows how many of its films
   you have watched, posters you have seen carry a check mark, and lists can be narrowed to the
   films you have not seen yet.
 - **Pick a film for me.** One click draws a film you have not seen from the list on screen.
-- **Collections, if you want them.** Each movement can also become a Jellyfin collection, so it
-  reaches the TV and mobile apps that do not load the tab. Off by default.
+- **Collections, if you want them.** Each movement can also become a Jellyfin collection, with
+  a poster drawn from its films, so it reaches the TV and mobile apps that do not load the tab.
+  Off by default.
 
 Everything respects each user's library access and parental controls. The interface is
 available in English and French, and country names follow the user's language.
@@ -69,7 +69,8 @@ available in English and French, and country names follow the user's language.
 
 The tab appears next to **Favorites** in the header of the modern layout, and under
 **Home** in the navigation drawer on small screens and in the legacy layouts (desktop,
-mobile and TV).
+mobile and TV). A **Cinematheque** tile also joins your libraries in **My Media** on the home
+page.
 
 ### Manual installation
 
@@ -80,7 +81,12 @@ extract it into a `Cinematheque_<version>` folder inside your Jellyfin `plugins`
 ## Configuration
 
 **Dashboard > Plugins > Cinematheque** sets how many actors per film count, the default
-minimum number of films for the people lists, and the movements.
+minimum number of films for the people lists, the movements, and whether movements become
+collections.
+
+Collections are named in the server's display language and follow their movement after every
+library scan: films added to them by hand are removed. Cinematheque only touches the
+collections it created, never deletes one, and never replaces a poster you set yourself.
 
 Built-in movements ship with the plugin and improve with each release, in English and French.
 The configuration page lists them in a form: edit one and your version is kept instead, hide the
@@ -122,6 +128,7 @@ The tab is a client for a small REST API, available to any authenticated user:
 | Endpoint | Description |
 |----------|-------------|
 | `GET /Cinematheque/People/{role}` | People in a role (`directors`, `actors`, `writers`), with `search`, `minFilms`, `sortBy` (`count` or `name`), `startIndex`, `limit` |
+| `GET /Cinematheque/People/{role}/{key}` | One person, by key (`tmdb:25236`) or name, with their years and countries |
 | `GET /Cinematheque/Countries` | Countries with film counts, decades and leading directors; `primaryOnly` counts each film under its first country |
 | `GET /Cinematheque/Movements` | Movements with film counts, named in `language` when translated |
 | `GET /Cinematheque/Films` | Films filtered by `country` (with `primaryCountry`), `person` (a key such as `tmdb:25236`, or a name) with `role`, `movement`, `decade`, `unseen` |
@@ -130,10 +137,12 @@ The tab is a client for a small REST API, available to any authenticated user:
 ## How it works
 
 The server side builds an in-memory catalog of the films each user can see, from Jellyfin's
-own metadata: production locations, people and genres. It is rebuilt after any library change.
+own metadata: production locations, people with their TMDB ids, and genres. It follows library
+changes, and drops a user's catalog as soon as their library access changes.
 
 On the web side, File Transformation adds one script tag to `index.html`. That loader adds the
-tab to whichever layout is active and loads the app when the tab is opened. The app lives on
+tab to whichever layout is active and the tile to **My Media**, and loads the app when the tab
+is opened. The app lives on
 the home route (`#/home?cinematheque=directors`), so the header, drawer, back button and
 bookmarks all keep working without registering a route in jellyfin-web.
 
