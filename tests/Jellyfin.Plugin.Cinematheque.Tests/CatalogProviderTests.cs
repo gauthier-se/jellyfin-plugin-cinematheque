@@ -2,6 +2,7 @@ using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.Cinematheque.Catalog;
 using Jellyfin.Plugin.Cinematheque.Library;
 using MediaBrowser.Controller.Entities.Movies;
+using NSubstitute;
 
 namespace Jellyfin.Plugin.Cinematheque.Tests;
 
@@ -49,6 +50,34 @@ public class CatalogProviderTests
 
         Assert.Empty(provider.GetCatalog(_child).Films);
         Assert.Single(provider.GetCatalog(_parent).Films);
+    }
+
+    [Fact]
+    public void The_library_is_read_once_for_every_user()
+    {
+        _server.AddFilm("Tokyo Story", directors: ["Yasujirō Ozu"]);
+        _server.AddFilm("In the Realm of the Senses", directors: ["Nagisa Oshima"], visibleTo: [_parent]);
+        using CatalogProvider provider = _server.CatalogProvider();
+
+        provider.GetCatalog(_parent);
+        provider.GetCatalog(_child);
+        _server.RaiseUserUpdated(_child);
+        provider.GetCatalog(_child);
+
+        // Credits are the costly read: one query per 500 films, joined with every credit.
+        _server.Library.Received(1).GetPeopleByItems(Arg.Any<IReadOnlyList<Guid>>());
+    }
+
+    [Fact]
+    public void Collection_sync_reads_the_library_afresh()
+    {
+        using CatalogProvider provider = _server.CatalogProvider();
+        Assert.Empty(provider.GetCatalog(_parent).Films);
+
+        // No library event: a sync right after a scan must not wait for the cache to expire.
+        _server.AddFilm("Tokyo Story");
+
+        Assert.Single(provider.BuildServerCatalog().Films);
     }
 
     [Fact]

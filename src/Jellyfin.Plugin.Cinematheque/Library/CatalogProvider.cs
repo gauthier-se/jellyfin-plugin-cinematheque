@@ -24,15 +24,17 @@ namespace Jellyfin.Plugin.Cinematheque.Library;
 /// Builds and caches one <see cref="FilmCatalog"/> per user.
 /// </summary>
 /// <remarks>
-/// The catalog is built from the films the user can see, so library access and parental controls
+/// The server's films are read once, with their credits, and shared by every catalog. Each user's
+/// catalog keeps the ones Jellyfin lets that user see, so library access and parental controls
 /// apply as they do everywhere else in Jellyfin.
 /// <list type="bullet">
 /// <item>A change to a user (library access, parental rating) drops that user's catalog at once,
 /// so a revoked library never lingers.</item>
-/// <item>A configuration change drops every catalog at once.</item>
-/// <item>A library change marks every catalog stale. A library scan raises thousands of changes,
-/// so a stale catalog keeps being served until it is <see cref="MinRebuildInterval"/> old: at
-/// most one rebuild per user per interval while a scan runs.</item>
+/// <item>A configuration change drops every catalog and the shared films at once.</item>
+/// <item>A library change marks the shared films stale. A library scan raises thousands of
+/// changes, so stale films keep being served until they are <see cref="MinRebuildInterval"/> old:
+/// at most one read of the library per interval while a scan runs. Catalogs follow the films they
+/// were built from, and are rebuilt on their user's next request.</item>
 /// </list>
 /// </remarks>
 public sealed class CatalogProvider : IDisposable
@@ -47,11 +49,13 @@ public sealed class CatalogProvider : IDisposable
     private readonly IUserManager _userManager;
     private readonly IUserDataManager _userDataManager;
     private readonly ILogger<CatalogProvider> _logger;
-    private readonly ConcurrentDictionary<Guid, Entry> _catalogs = new();
+    private readonly ConcurrentDictionary<Guid, CatalogEntry> _catalogs = new();
     private readonly ConcurrentDictionary<Guid, Lazy<IReadOnlySet<Guid>>> _seen = new();
 
     // Credited name to TMDB person id (null when the person has none), shared by every user.
     private readonly ConcurrentDictionary<string, string?> _personTmdbIds = new(StringComparer.Ordinal);
+    private readonly Lock _filmsLock = new();
+    private FilmsEntry? _films;
     private long _libraryGeneration;
 
     /// <summary>
@@ -90,11 +94,11 @@ public sealed class CatalogProvider : IDisposable
     {
         ArgumentNullException.ThrowIfNull(user);
 
-        long generation = Interlocked.Read(ref _libraryGeneration);
-        Entry entry = _catalogs.AddOrUpdate(
+        FilmsEntry films = CurrentFilms();
+        CatalogEntry entry = _catalogs.AddOrUpdate(
             user.Id,
-            _ => new Entry(() => Build(user), generation),
-            (_, existing) => existing.IsUsable(generation) ? existing : new Entry(() => Build(user), generation));
+            _ => new CatalogEntry(films, () => BuildCatalog(user, films)),
+            (_, existing) => existing.Films == films ? existing : new CatalogEntry(films, () => BuildCatalog(user, films)));
 
         try
         {
@@ -132,11 +136,12 @@ public sealed class CatalogProvider : IDisposable
     }
 
     /// <summary>
-    /// Builds a catalog of every film on the server, regardless of user access. Not cached: it
-    /// feeds background work such as collection sync, never a user's request.
+    /// Builds a catalog of every film on the server, regardless of user access. Read afresh rather
+    /// than from the shared films: it feeds background work such as collection sync, which runs
+    /// right after a library scan and must not miss its last films.
     /// </summary>
     /// <returns>The catalog.</returns>
-    public FilmCatalog BuildServerCatalog() => Build(null);
+    public FilmCatalog BuildServerCatalog() => new FilmCatalog(LoadFilms(), Configuration.GetEffectiveMovements());
 
     /// <inheritdoc />
     public void Dispose()
@@ -161,7 +166,59 @@ public sealed class CatalogProvider : IDisposable
             IsPlayed = true,
         }).ToHashSet();
 
-    private FilmCatalog Build(User? user)
+    // The shared films, read again once the library changed and the interval has passed.
+    private FilmsEntry CurrentFilms()
+    {
+        long generation = Interlocked.Read(ref _libraryGeneration);
+        lock (_filmsLock)
+        {
+            if (_films is null || !_films.IsUsable(generation))
+            {
+                _films = new FilmsEntry(LoadFilms, generation);
+
+                // Catalogs of users who are not around would keep the old films in memory.
+                _catalogs.Clear();
+            }
+
+            return _films;
+        }
+    }
+
+    private IReadOnlyList<Film> GetFilms(FilmsEntry entry)
+    {
+        try
+        {
+            return entry.Films.Value;
+        }
+        catch
+        {
+            // Lazy caches exceptions: forget the failed read so the next request retries.
+            lock (_filmsLock)
+            {
+                if (_films == entry)
+                {
+                    _films = null;
+                }
+            }
+
+            throw;
+        }
+    }
+
+    private FilmCatalog BuildCatalog(User user, FilmsEntry films)
+    {
+        HashSet<Guid> visible = _libraryManager.GetItemIds(new InternalItemsQuery(user)
+        {
+            IncludeItemTypes = [BaseItemKind.Movie],
+            Recursive = true,
+            IsVirtualItem = false,
+        }).ToHashSet();
+
+        return new FilmCatalog(GetFilms(films).Where(f => visible.Contains(f.Id)), Configuration.GetEffectiveMovements());
+    }
+
+    // Every film on the server with its credits, whoever can see it.
+    private List<Film> LoadFilms()
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
         PluginConfiguration configuration = Configuration;
@@ -170,7 +227,7 @@ public sealed class CatalogProvider : IDisposable
         // data are left out, since every joined table multiplies the rows returned.
         DtoOptions options = DtoOptions.StoredColumnsOnly;
         options.Fields = [ItemFields.ProviderIds];
-        IReadOnlyList<BaseItem> items = _libraryManager.GetItemList(new InternalItemsQuery(user)
+        IReadOnlyList<BaseItem> items = _libraryManager.GetItemList(new InternalItemsQuery
         {
             IncludeItemTypes = [BaseItemKind.Movie],
             Recursive = true,
@@ -223,13 +280,8 @@ public sealed class CatalogProvider : IDisposable
                 Credits(writers)));
         }
 
-        FilmCatalog catalog = new FilmCatalog(films, configuration.GetEffectiveMovements());
-        _logger.LogDebug(
-            "Built the Cinematheque catalog for {UserId}: {FilmCount} films in {ElapsedMilliseconds} ms",
-            user?.Id.ToString() ?? "the server",
-            films.Count,
-            stopwatch.ElapsedMilliseconds);
-        return catalog;
+        _logger.LogDebug("Read {FilmCount} films for Cinematheque in {ElapsedMilliseconds} ms", films.Count, stopwatch.ElapsedMilliseconds);
+        return films;
     }
 
     /// <summary>
@@ -325,25 +377,47 @@ public sealed class CatalogProvider : IDisposable
         }
     }
 
+    // Movements change every catalog; actors per film change the films themselves.
     private void OnConfigurationChanged(object? sender, BasePluginConfiguration e)
-        => _catalogs.Clear();
+    {
+        lock (_filmsLock)
+        {
+            _films = null;
+        }
 
-    private sealed class Entry
+        _catalogs.Clear();
+    }
+
+    private sealed class FilmsEntry
     {
         private readonly long _createdAt = Environment.TickCount64;
 
-        public Entry(Func<FilmCatalog> build, long generation)
+        public FilmsEntry(Func<IReadOnlyList<Film>> load, long generation)
         {
-            Catalog = new Lazy<FilmCatalog>(build, LazyThreadSafetyMode.ExecutionAndPublication);
+            Films = new Lazy<IReadOnlyList<Film>>(load, LazyThreadSafetyMode.ExecutionAndPublication);
             Generation = generation;
         }
 
-        public Lazy<FilmCatalog> Catalog { get; }
+        public Lazy<IReadOnlyList<Film>> Films { get; }
 
         public long Generation { get; }
 
         public bool IsUsable(long currentGeneration)
             => Generation == currentGeneration
                 || Environment.TickCount64 - _createdAt < (long)MinRebuildInterval.TotalMilliseconds;
+    }
+
+    // A user's catalog, and the shared films it was built from: new films mean a new catalog.
+    private sealed class CatalogEntry
+    {
+        public CatalogEntry(FilmsEntry films, Func<FilmCatalog> build)
+        {
+            Films = films;
+            Catalog = new Lazy<FilmCatalog>(build, LazyThreadSafetyMode.ExecutionAndPublication);
+        }
+
+        public FilmsEntry Films { get; }
+
+        public Lazy<FilmCatalog> Catalog { get; }
     }
 }
