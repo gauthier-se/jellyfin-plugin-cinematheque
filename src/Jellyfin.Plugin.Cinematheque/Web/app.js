@@ -237,11 +237,20 @@
 
   // ---------------------------------------------------------------- API
 
-  // Short-lived, so a long-open tab still picks up library changes.
+  // Short-lived, so a long-open tab still picks up library changes. Signing out does not reload
+  // the page and URLs do not name the user, so the cache is dropped when the user changes:
+  // the next one must not see lists built from the previous one's libraries.
   var CACHE_MS = 5 * 60 * 1000;
   var cache = new Map();
+  var cacheUser = null;
 
   function api(path, params) {
+    var user = ApiClient.getCurrentUserId();
+    if (user !== cacheUser) {
+      cache.clear();
+      cacheUser = user;
+    }
+
     var url = ApiClient.getUrl('Cinematheque/' + path, params || {});
     var hit = cache.get(url);
     if (hit && Date.now() - hit.time < CACHE_MS) {
@@ -266,6 +275,11 @@
   var renderedKey = null;
   var renderToken = 0;
 
+  // The user is part of the key, so the view is rebuilt for whoever signs in next.
+  function renderKey() {
+    return ApiClient.getCurrentUserId() + location.hash;
+  }
+
   function render(force) {
     var host = findHost();
     if (!host) {
@@ -278,7 +292,7 @@
       root = null;
     }
 
-    var key = location.hash;
+    var key = renderKey();
     if (root && key === renderedKey && !force) {
       return;
     }

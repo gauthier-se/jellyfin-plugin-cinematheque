@@ -109,6 +109,7 @@
   // collections instead.
   var TILE_ATTR = 'data-cinematheque-tile';
   var tileImage = null;
+  var tileImageUser = null;
 
   // Prefer a library tile over a special view such as Live TV, whose styling may differ.
   function findLibraryTile() {
@@ -174,12 +175,24 @@
 
   // A film backdrop under a veil in the logo's colours, so the name themes write over library
   // tiles stays readable on any picture. Fetched as a blob: URL, which keeps other plugins from
-  // mistaking the tile for that film.
+  // mistaking the tile for that film. Drawn again for each user: signing out does not reload the
+  // page, and the next user may not have access to that film.
   var TILE_VEIL = 'linear-gradient(135deg, rgba(110, 45, 140, 0.72), rgba(0, 110, 160, 0.62))';
 
   function setTileImage(element) {
+    var user = ApiClient.getCurrentUserId();
+    if (tileImage && tileImageUser !== user) {
+      tileImage.then(function (url) {
+        if (url) {
+          URL.revokeObjectURL(url);
+        }
+      });
+      tileImage = null;
+    }
+
     if (!tileImage) {
-      tileImage = ApiClient.getJSON(ApiClient.getUrl('Users/' + ApiClient.getCurrentUserId() + '/Items', {
+      tileImageUser = user;
+      tileImage = ApiClient.getJSON(ApiClient.getUrl('Users/' + user + '/Items', {
         IncludeItemTypes: 'Movie',
         Recursive: true,
         ImageTypes: 'Backdrop',
