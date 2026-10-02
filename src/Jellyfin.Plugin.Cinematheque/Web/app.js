@@ -201,12 +201,18 @@
 
   // ---------------------------------------------------------------- routing
 
+  // The parameters the views read. The URL is anyone's to write, so only these become route
+  // properties: a parameter named __proto__ or constructor never reaches an object.
+  var ROUTE_KEYS = ['person', 'name', 'country', 'movement', 'decade', 'unseen', 'primary', 'q', 'sort', 'min', 'limit'];
+
   function readRoute() {
-    var query = location.hash.split('?')[1] || '';
-    var params = new URLSearchParams(query);
-    var route = Object.create(null);
-    params.forEach(function (value, key) { route[key] = value; });
-    route.view = route.cinematheque || 'directors';
+    var params = new URLSearchParams(location.hash.split('?')[1] || '');
+    var route = { view: params.get('cinematheque') || 'directors' };
+    ROUTE_KEYS.forEach(function (key) {
+      if (params.has(key)) {
+        route[key] = params.get(key);
+      }
+    });
     return route;
   }
 
@@ -318,7 +324,7 @@
     var body = h('div', { class: 'cin-body' }, h('p', { class: 'cin-status', text: t('loading') }));
     root.appendChild(body);
 
-    var view = own(VIEWS, route.view) ? VIEWS[route.view] : VIEWS.directors;
+    var view = VIEWS.has(route.view) ? VIEWS.get(route.view) : VIEWS.get('directors');
     Promise.resolve(view(route)).then(function (content) {
       if (token === renderToken) {
         body.replaceChildren(content);
@@ -721,18 +727,19 @@
     });
   }
 
-  var VIEWS = {
-    directors: peopleView('director'),
-    actors: peopleView('actor'),
-    writers: peopleView('writer'),
-    director: personView('director'),
-    actor: personView('actor'),
-    writer: personView('writer'),
-    countries: countriesView,
-    country: countryView,
-    movements: movementsView,
-    movement: movementView
-  };
+  // A Map, so a view name read from the URL can only ever select one of these.
+  var VIEWS = new Map([
+    ['directors', peopleView('director')],
+    ['actors', peopleView('actor')],
+    ['writers', peopleView('writer')],
+    ['director', personView('director')],
+    ['actor', personView('actor')],
+    ['writer', personView('writer')],
+    ['countries', countriesView],
+    ['country', countryView],
+    ['movements', movementsView],
+    ['movement', movementView]
+  ]);
 
   window.Cinematheque = { render: function () { render(false); }, unmount: unmount };
 })();
