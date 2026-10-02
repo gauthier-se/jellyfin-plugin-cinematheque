@@ -1,7 +1,7 @@
 ---
 name: "Cinematheque"
 guid: "6f86a1dd-c4dc-4aa6-a445-8f19be1087c1"
-version: "0.2.0.0"
+version: "0.3.0.0"
 targetAbi: "12.1.0.0"
 framework: "net10.0"
 overview: "Browse your films by director, actor, country and film movement"
@@ -17,6 +17,7 @@ imageUrl: "https://raw.githubusercontent.com/gauthier-se/jellyfin-plugin-cinemat
 artifacts:
   - "Jellyfin.Plugin.Cinematheque.dll"
 changelog: >
-  People identified by TMDB id, screenwriters, watch progress, "pick a film for me",
-  primary-country view, translated movements edited in a form, optional movement
-  collections with posters, and a tile in My Media. See CHANGELOG.md.
+  Fixes a web cache that showed one user's lists to the next on a shared browser, lists
+  that stopped at 480 items, collections left out of sync, and a configuration page that
+  could erase movements. The library is read once for every user, and the tab sits in
+  Jellyfin's header. Removes the 0.1 Directors and Actors endpoints. See CHANGELOG.md.
