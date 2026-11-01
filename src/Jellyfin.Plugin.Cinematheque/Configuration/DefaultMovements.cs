@@ -97,7 +97,7 @@ public static class DefaultMovements
             "Television-trained directors who remade Hong Kong cinema, and the second wave that followed.",
             ["HK"],
             (1978, 1997),
-            ["Tsui Hark (tmdb:26760)", "Ann Hui (tmdb:123199)", "Patrick Tam (tmdb:71063)", "Allen Fong (tmdb:975054)", "Yim Ho", "Alex Cheung", "Clara Law (tmdb:96449)", "Stanley Kwan (tmdb:96861)", "Wong Kar-wai (tmdb:12453)", "Fruit Chan (tmdb:56865)", "Mabel Cheung (tmdb:103602)"])
+            ["Tsui Hark (tmdb:26760)", "Ann Hui (tmdb:123199)", "Patrick Tam (tmdb:71063)", "Allen Fong (tmdb:975054)", "Yim Ho (tmdb:146295)", "Alex Cheung (tmdb:931207)", "Clara Law (tmdb:96449)", "Stanley Kwan (tmdb:96861)", "Wong Kar-wai (tmdb:12453)", "Fruit Chan (tmdb:56865)", "Mabel Cheung (tmdb:103602)"])
             .WithTranslation("fr", "Nouvelle Vague hongkongaise", "Des réalisateurs venus de la télévision refont le cinéma de Hong Kong, puis la seconde vague prend le relais."),
         MovementDefinition.Create(
             "heroic-bloodshed",
@@ -114,7 +114,7 @@ public static class DefaultMovements
             "Long takes and everyday life in a changing Taiwan.",
             ["TW"],
             (1982, 2000),
-            ["Hou Hsiao-hsien (tmdb:64992)", "Edward Yang (tmdb:143035)", "Tsai Ming-liang (tmdb:71174)", "Wan Jen (tmdb:1158867)", "Wang Tung (tmdb:1158889)", "Ko I-chen"])
+            ["Hou Hsiao-hsien (tmdb:64992)", "Edward Yang (tmdb:143035)", "Tsai Ming-liang (tmdb:71174)", "Wan Jen (tmdb:1158867)", "Wang Tung (tmdb:1158889)", "Ko I-chen (tmdb:1092245)"])
             .WithTranslation("fr", "Nouveau cinéma taïwanais", "Plans longs et vie quotidienne dans un Taïwan en pleine mutation."),
         MovementDefinition.Create(
             "iranian-new-wave",
