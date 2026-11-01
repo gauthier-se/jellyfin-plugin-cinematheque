@@ -15,6 +15,7 @@ public sealed class MovementMatcher
     private readonly HashSet<string> _genres;
     private readonly HashSet<string> _tags;
     private readonly HashSet<string> _tmdbIds;
+    private readonly HashSet<string> _excludedTmdbIds;
     private readonly int? _yearFrom;
     private readonly int? _yearTo;
     private readonly bool _hasRules;
@@ -33,9 +34,11 @@ public sealed class MovementMatcher
         _directors = (movement.Directors ?? []).Select(PersonRef.Parse).OfType<PersonRef>().ToArray();
         _genres = KeySet(movement.Genres);
         _tags = KeySet(movement.Tags);
-        _tmdbIds = new HashSet<string>(
-            (movement.TmdbIds ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()),
-            StringComparer.Ordinal);
+        _excludedTmdbIds = IdSet(movement.ExcludedTmdbIds);
+        Essentials = (movement.Essentials ?? [])
+            .Where(f => !string.IsNullOrWhiteSpace(f.TmdbId) && !_excludedTmdbIds.Contains(f.TmdbId.Trim()))
+            .ToArray();
+        _tmdbIds = IdSet((movement.TmdbIds ?? []).Concat(Essentials.Select(f => f.TmdbId)));
         _yearFrom = movement.YearFrom;
         _yearTo = movement.YearTo;
         _hasRules = _countries.Count > 0 || _directors.Count > 0 || _genres.Count > 0 || _tags.Count > 0;
@@ -47,6 +50,11 @@ public sealed class MovementMatcher
     public MovementDefinition Movement { get; }
 
     /// <summary>
+    /// Gets the essential films, without any the movement excludes.
+    /// </summary>
+    public IReadOnlyList<EssentialFilm> Essentials { get; }
+
+    /// <summary>
     /// Tells whether a film belongs to the movement.
     /// </summary>
     /// <param name="film">The film.</param>
@@ -55,9 +63,17 @@ public sealed class MovementMatcher
     {
         ArgumentNullException.ThrowIfNull(film);
 
-        if (film.TmdbId is not null && _tmdbIds.Contains(film.TmdbId))
+        if (film.TmdbId is not null)
         {
-            return true;
+            if (_excludedTmdbIds.Contains(film.TmdbId))
+            {
+                return false;
+            }
+
+            if (_tmdbIds.Contains(film.TmdbId))
+            {
+                return true;
+            }
         }
 
         if (!_hasRules)
@@ -81,6 +97,11 @@ public sealed class MovementMatcher
 
     private static bool MatchesAny(HashSet<string> wanted, IEnumerable<string> values)
         => wanted.Count == 0 || values.Any(value => wanted.Contains(Names.Key(value)));
+
+    private static HashSet<string> IdSet(IEnumerable<string>? ids)
+        => new HashSet<string>(
+            (ids ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()),
+            StringComparer.Ordinal);
 
     private static HashSet<string> KeySet(IEnumerable<string>? values)
         => new HashSet<string>(

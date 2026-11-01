@@ -17,6 +17,25 @@ namespace Jellyfin.Plugin.Cinematheque.Configuration;
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Arrays keep the XML configuration round trip replace-only.")]
 public class PluginConfiguration : BasePluginConfiguration
 {
+    // Frozen on purpose. A movement saved by 0.1 under an id that only became a built-in later was
+    // added by the administrator, so it is not a copy to drop.
+    private static readonly string[] _version01BuiltInIds =
+    [
+        "german-expressionism",
+        "italian-neorealism",
+        "french-new-wave",
+        "japanese-new-wave",
+        "czechoslovak-new-wave",
+        "cinema-novo",
+        "spaghetti-western",
+        "new-hollywood",
+        "new-german-cinema",
+        "hong-kong-new-wave",
+        "heroic-bloodshed",
+        "taiwan-new-cinema",
+        "iranian-new-wave",
+    ];
+
     /// <summary>
     /// Gets or sets how many actors per film count, in billing order.
     /// </summary>
@@ -102,8 +121,7 @@ public class PluginConfiguration : BasePluginConfiguration
             return false;
         }
 
-        HashSet<string> builtInIds = new HashSet<string>(DefaultMovements.Create().Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
-        CustomMovements = [.. CustomMovements ?? [], .. Movements.Where(m => !builtInIds.Contains(m.Id))];
+        CustomMovements = [.. CustomMovements ?? [], .. Movements.Where(m => !_version01BuiltInIds.Contains(m.Id, StringComparer.OrdinalIgnoreCase))];
         Movements = [];
         return true;
     }

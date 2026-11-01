@@ -18,7 +18,7 @@
       #CinemathequeConfigPage .cin-actions { display: flex; flex-wrap: wrap; gap: 0.5em; margin-top: 0.5em; }
       #CinemathequeConfigPage .cin-translation { display: grid; grid-template-columns: 6em 1fr 2fr auto; gap: 0.5em; align-items: end; }
       #CinemathequeConfigPage .cin-error { color: #e57373; }
-      #CinemathequeConfigPage textarea.emby-textarea { min-height: 6em; }
+      #CinemathequeConfigPage textarea.emby-textarea { display: block; box-sizing: border-box; width: 100%; min-height: 6em; }
     </style>
     <div data-role="content">
       <div class="content-primary">
@@ -57,7 +57,7 @@
               Built-in movements come with the plugin and improve with each release. Editing one keeps your
               version instead; hiding one removes it from the tab. A film belongs to a movement when its TMDB id
               is listed, or when it matches every rule that is filled in: one of the countries, within the
-              years, by one of the directors, with one of the genres and one of the tags.
+              years, by one of the directors, with one of the genres and one of the tags. Excluded ids always win.
             </p>
             <div id="MovementList"></div>
             <div class="cin-actions">
@@ -164,6 +164,8 @@
             Genres: listOf(m.Genres),
             Tags: listOf(m.Tags),
             TmdbIds: listOf(m.TmdbIds),
+            ExcludedTmdbIds: listOf(m.ExcludedTmdbIds),
+            Essentials: (m.Essentials || []).map(function (f) { return String(f.TmdbId).trim(); }),
             Translations: (m.Translations || [])
               .filter(function (t) { return t.Language && t.Name; })
               .map(function (t) { return { Language: t.Language.trim(), Name: t.Name.trim(), Description: (t.Description || '').trim() }; })
@@ -309,7 +311,8 @@
             h('div', { class: 'cin-row' },
               field('Genres', listInput(m.Genres, ',', function (v) { m.Genres = v; refresh(); }), 'Comma separated, as your library names them.'),
               field('Tags', listInput(m.Tags, ',', function (v) { m.Tags = v; refresh(); }), 'Comma separated.'),
-              field('TMDB film ids', listInput(m.TmdbIds, ',', function (v) { m.TmdbIds = v; refresh(); }), 'Films included whatever the rules.')),
+              field('TMDB film ids', listInput(m.TmdbIds, ',', function (v) { m.TmdbIds = v; refresh(); }), 'Films included whatever the rules.'),
+              field('Excluded TMDB film ids', listInput(m.ExcludedTmdbIds, ',', function (v) { m.ExcludedTmdbIds = v; refresh(); }), 'Films left out whatever the rules.')),
             translationsEditor(entry, refresh),
             actions));
           return details;
@@ -421,7 +424,7 @@
         page.addEventListener('pageshow', reload);
 
         page.querySelector('#AddMovement').addEventListener('click', function () {
-          entries.push({ builtIn: null, value: { Id: '', Name: '', Description: '', Countries: [], Directors: [], Genres: [], Tags: [], TmdbIds: [], Translations: [] }, hidden: false });
+          entries.push({ builtIn: null, value: { Id: '', Name: '', Description: '', Countries: [], Directors: [], Genres: [], Tags: [], TmdbIds: [], ExcludedTmdbIds: [], Essentials: [], Translations: [] }, hidden: false });
           render(entries.length - 1);
         });
 

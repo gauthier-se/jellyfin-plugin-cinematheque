@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Configuration\configPage.html" />
+    <EmbeddedResource Include="Configuration\MovementFilms.json" />
     <EmbeddedResource Include="Web\*.js;Web\*.css" />
   </ItemGroup>
 

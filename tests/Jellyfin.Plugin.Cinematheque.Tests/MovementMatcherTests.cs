@@ -72,6 +72,60 @@ public class MovementMatcherTests
     }
 
     [Fact]
+    public void Essential_films_bypass_the_rules()
+    {
+        MovementDefinition movement = MovementDefinition.Create("x", "X", string.Empty, ["DE"], (1919, 1933), ["Fritz Lang"]);
+        movement.Essentials = [new EssentialFilm { TmdbId = "631", Title = "Sunrise", Year = 1927 }];
+        MovementMatcher matcher = new(movement);
+
+        Assert.True(matcher.Matches(Film("Sunrise", 1927, ["United States of America"], ["F. W. Murnau"], tmdbId: "631")));
+    }
+
+    [Fact]
+    public void Excluded_tmdb_ids_beat_the_rules()
+    {
+        MovementDefinition movement = MovementDefinition.Create("x", "X", string.Empty, ["DE"], (1919, 1933), ["Fritz Lang"]);
+        movement.ExcludedTmdbIds = ["5206"];
+        MovementMatcher matcher = new(movement);
+
+        Assert.False(matcher.Matches(Film("Woman in the Moon", 1929, ["Germany"], ["Fritz Lang"], tmdbId: "5206")));
+        Assert.True(matcher.Matches(Film("Metropolis", 1927, ["Germany"], ["Fritz Lang"], tmdbId: "19")));
+    }
+
+    [Fact]
+    public void Excluded_tmdb_ids_beat_explicit_ids_and_essentials()
+    {
+        MovementDefinition movement = new()
+        {
+            Id = "x",
+            TmdbIds = ["1"],
+            Essentials = [new EssentialFilm { TmdbId = "2", Title = "Two" }, new EssentialFilm { TmdbId = "3", Title = "Three" }],
+            ExcludedTmdbIds = ["1", " 2 "],
+        };
+        MovementMatcher matcher = new(movement);
+
+        Assert.False(matcher.Matches(Film("One", tmdbId: "1")));
+        Assert.False(matcher.Matches(Film("Two", tmdbId: "2")));
+        Assert.Equal(["Three"], matcher.Essentials.Select(f => f.Title));
+    }
+
+    [Fact]
+    public void Essentials_without_a_tmdb_id_are_ignored()
+    {
+        MovementDefinition movement = new() { Id = "x", Essentials = [new EssentialFilm { Title = "No id" }] };
+
+        Assert.Empty(new MovementMatcher(movement).Essentials);
+    }
+
+    [Fact]
+    public void A_saved_movement_may_have_no_film_lists()
+    {
+        MovementDefinition movement = new() { Id = "x", Essentials = null!, ExcludedTmdbIds = null!, TmdbIds = null! };
+
+        Assert.False(new MovementMatcher(movement).Matches(Film("Film", tmdbId: "1")));
+    }
+
+    [Fact]
     public void A_movement_without_rules_only_matches_its_tmdb_ids()
     {
         MovementMatcher matcher = new(new MovementDefinition { Id = "empty", YearFrom = 1950, YearTo = 1960 });

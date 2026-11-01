@@ -7,10 +7,11 @@ namespace Jellyfin.Plugin.Cinematheque.Configuration;
 /// A curated film movement, such as the French New Wave, described as a set of rules.
 /// </summary>
 /// <remarks>
-/// A film belongs to the movement when its TMDB id is listed in <see cref="TmdbIds"/>, or when it
-/// satisfies every rule that is set: one of the countries, inside the year range, by one of the
-/// directors, with one of the genres, with one of the tags. Empty rules are ignored, and a movement
-/// with no country, director, genre or tag rule only matches its explicit TMDB ids.
+/// A film belongs to the movement when its TMDB id is listed in <see cref="TmdbIds"/> or
+/// <see cref="Essentials"/>, or when it satisfies every rule that is set: one of the countries,
+/// inside the year range, by one of the directors, with one of the genres, with one of the tags.
+/// Empty rules are ignored, and a movement with no country, director, genre or tag rule only
+/// matches its explicit TMDB ids. <see cref="ExcludedTmdbIds"/> overrides all of the above.
 /// </remarks>
 [SuppressMessage("Performance", "CA1819:Properties should not return arrays", Justification = "Arrays keep the XML configuration round trip replace-only.")]
 public class MovementDefinition
@@ -67,6 +68,18 @@ public class MovementDefinition
     public string[] TmdbIds { get; set; } = [];
 
     /// <summary>
+    /// Gets or sets TMDB ids of films that never belong to the movement, even when they satisfy
+    /// the rules or are listed in <see cref="TmdbIds"/>.
+    /// </summary>
+    public string[] ExcludedTmdbIds { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the films that define the movement. They belong to it regardless of the rules,
+    /// and the movement page lists the ones missing from the library.
+    /// </summary>
+    public EssentialFilm[] Essentials { get; set; } = [];
+
+    /// <summary>
     /// Gets or sets the name and description in other languages. <see cref="Name"/> and
     /// <see cref="Description"/> are the fallback.
     /// </summary>
@@ -80,19 +93,10 @@ public class MovementDefinition
     /// <returns>The name and description.</returns>
     public (string Name, string Description) Localize(string? language)
     {
-        if (!string.IsNullOrWhiteSpace(language))
-        {
-            string baseLanguage = language.Split('-', '_')[0];
-            MovementTranslation? translation =
-                Array.Find(Translations ?? [], t => string.Equals(t.Language, language, StringComparison.OrdinalIgnoreCase))
-                ?? Array.Find(Translations ?? [], t => string.Equals(t.Language, baseLanguage, StringComparison.OrdinalIgnoreCase));
-            if (translation is not null && !string.IsNullOrWhiteSpace(translation.Name))
-            {
-                return (translation.Name, string.IsNullOrWhiteSpace(translation.Description) ? Description : translation.Description);
-            }
-        }
-
-        return (Name, Description);
+        MovementTranslation? translation = Translations.FindForLanguage(language, t => t.Language);
+        return translation is not null && !string.IsNullOrWhiteSpace(translation.Name)
+            ? (translation.Name, string.IsNullOrWhiteSpace(translation.Description) ? Description : translation.Description)
+            : (Name, Description);
     }
 
     /// <summary>

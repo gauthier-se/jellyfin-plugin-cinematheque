@@ -1,3 +1,5 @@
+using System.Xml;
+using System.Xml.Serialization;
 using Jellyfin.Plugin.Cinematheque.Configuration;
 
 namespace Jellyfin.Plugin.Cinematheque.Tests;
@@ -66,4 +68,36 @@ public class PluginConfigurationTests
     [Fact]
     public void Every_built_in_has_a_french_translation()
         => Assert.All(DefaultMovements.Create(), m => Assert.Contains(m.Translations, t => t.Language == "fr"));
+
+    [Theory]
+    [InlineData("fr", "À bout de souffle")]
+    [InlineData("fr-CA", "À bout de souffle")]
+    [InlineData("de", "Breathless")]
+    [InlineData(null, "Breathless")]
+    public void Essential_films_are_localized_with_a_fallback(string? language, string expected)
+    {
+        EssentialFilm breathless = DefaultMovements.Create().Single(m => m.Id == "french-new-wave").Essentials.Single(f => f.TmdbId == "269");
+
+        Assert.Equal(expected, breathless.Localize(language));
+    }
+
+    [Fact]
+    public void Film_lists_survive_the_xml_round_trip()
+    {
+        PluginConfiguration configuration = new() { CustomMovements = [DefaultMovements.Create().Single(m => m.Id == "dogme-95")] };
+        configuration.CustomMovements[0].ExcludedTmdbIds = ["1"];
+
+        XmlSerializer serializer = new(typeof(PluginConfiguration));
+        using MemoryStream stream = new();
+        serializer.Serialize(stream, configuration);
+        stream.Position = 0;
+        using XmlReader reader = XmlReader.Create(stream);
+        MovementDefinition saved = ((PluginConfiguration)serializer.Deserialize(reader)!).CustomMovements[0];
+
+        Assert.Equal(["1"], saved.ExcludedTmdbIds);
+        Assert.Equal(configuration.CustomMovements[0].TmdbIds, saved.TmdbIds);
+        Assert.Equal(
+            configuration.CustomMovements[0].Essentials.Select(f => f.Localize("fr")),
+            saved.Essentials.Select(f => f.Localize("fr")));
+    }
 }

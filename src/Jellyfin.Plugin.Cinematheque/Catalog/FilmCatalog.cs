@@ -18,6 +18,7 @@ public sealed class FilmCatalog
 {
     private const int TopCountries = 3;
     private const int TopDirectors = 5;
+    private const int TopMovementDirectors = 12;
 
     private readonly Dictionary<PersonRole, Lazy<IReadOnlyList<PersonSummary>>> _people;
     private readonly Lazy<IReadOnlyList<CountrySummary>> _countries;
@@ -46,7 +47,7 @@ public sealed class FilmCatalog
         _countries = new Lazy<IReadOnlyList<CountrySummary>>(() => SummarizeCountries(primaryOnly: false));
         _primaryCountries = new Lazy<IReadOnlyList<CountrySummary>>(() => SummarizeCountries(primaryOnly: true));
         _movementSummaries = new Lazy<IReadOnlyList<MovementSummary>>(
-            () => _movements.Select(m => new MovementSummary(m.Movement, Films.Where(m.Matches).Select(f => f.Id).ToArray())).ToArray());
+            () => _movements.Select(Summarize).ToArray());
     }
 
     /// <summary>
@@ -231,6 +232,28 @@ public sealed class FilmCatalog
             .ThenBy(p => p.Name, StringComparer.Ordinal)
             .ToArray();
 
+    private static IReadOnlyList<PersonLink> LeadingDirectors(IEnumerable<Film> films, int count)
+        => films
+            .SelectMany(f => DistinctPeople(f.Directors))
+            .GroupBy(c => c.Key, StringComparer.Ordinal)
+            .OrderByDescending(d => d.Count())
+            .ThenBy(d => d.First().Name, StringComparer.OrdinalIgnoreCase)
+            .Take(count)
+            .Select(d => new PersonLink(d.Key, ChooseName(d.Select(c => c.Name))))
+            .ToArray();
+
+    private MovementSummary Summarize(MovementMatcher matcher)
+    {
+        Film[] films = Films.Where(matcher.Matches).ToArray();
+        HashSet<string> owned = new HashSet<string>(films.Select(f => f.TmdbId).OfType<string>(), StringComparer.Ordinal);
+        return new MovementSummary(
+            matcher.Movement,
+            films.Select(f => f.Id).ToArray(),
+            LeadingDirectors(films, TopMovementDirectors),
+            matcher.Essentials.Count,
+            matcher.Essentials.Where(f => !owned.Contains(f.TmdbId.Trim())).ToArray());
+    }
+
     private IReadOnlyList<CountrySummary> SummarizeCountries(bool primaryOnly)
         => Films
             .SelectMany(f => CountriesOf(f, primaryOnly).Select(c => (Country: c, Film: f)))
@@ -239,13 +262,7 @@ public sealed class FilmCatalog
                 g.First().Country,
                 g.Select(x => x.Film.Id).ToArray(),
                 CountByDecade(g.Select(x => x.Film)),
-                g.SelectMany(x => DistinctPeople(x.Film.Directors))
-                    .GroupBy(c => c.Key, StringComparer.Ordinal)
-                    .OrderByDescending(d => d.Count())
-                    .ThenBy(d => d.First().Name, StringComparer.OrdinalIgnoreCase)
-                    .Take(TopDirectors)
-                    .Select(d => new PersonLink(d.Key, ChooseName(d.Select(c => c.Name))))
-                    .ToArray()))
+                LeadingDirectors(g.Select(x => x.Film), TopDirectors)))
             .OrderByDescending(c => c.FilmCount)
             .ThenBy(c => c.Country.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
