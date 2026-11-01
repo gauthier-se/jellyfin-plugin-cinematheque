@@ -6,10 +6,31 @@ four-part plugin versioning.
 
 ## [Unreleased]
 
+### Added
+
+- 13 new built-in movements: Soviet Montage, French Poetic Realism, Film Noir, Indian Parallel
+  Cinema, Polish Film School, British New Wave, Giallo, Yugoslav Black Wave, Australian New Wave,
+  China's Fifth Generation, Korean New Wave, Dogme 95 and the Romanian New Wave.
+- Essential films: every built-in movement lists the films that define it, and its page shows
+  the ones missing from your library, with a link to TMDB.
+- Movement pages show their leading directors.
+- `ExcludedTmdbIds` leaves a film out of a movement whatever its rules say.
+- `GET /Cinematheque/Movements/{id}`.
+
+### Changed
+
+- The built-in movements gained about 60 directors and a list of individual films, for directors
+  who only touched a movement with one film. They are now listed by the year they started.
+- Spaghetti Western also counts westerns co-produced with Spain.
+- A movement you edited keeps your version, so it misses these additions until you press
+  **Restore the built-in version**. One you added under the id of a new built-in, such as
+  `giallo`, now counts as your edit of that built-in.
+
 ### Fixed
 
 - The Cinematheque tile in **My Media** shows its name over its picture, like the libraries next
   to it, instead of a picture alone.
+- The Directors box of the configuration page takes the full width.
 
 ## [0.3.0] - 2026-10-02
 

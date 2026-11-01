@@ -15,6 +15,20 @@ The default movements are meant to be accurate rather than exhaustive: a country
 the directors who defined it. To propose one, open a feature request with its JSON definition
 (see the README) and a source for the director list.
 
+A director belongs in a movement only when their work of that country and period does. Someone
+who touched it with one film gets that film in `MovementFilms.json` instead, and a rule's false
+positives go in its `ExcludedTmdbIds`. Rules live in `DefaultMovements.cs`; essential films and the
+lists of film noir, giallo and Dogme 95 live in `MovementFilms.json`.
+
+After changing either file, check the TMDB ids against Wikidata:
+
+```sh
+python3 tools/audit_movements.py
+```
+
+An unknown id fails the run. A different name only warns, since it is often an alternative title
+or romanization, but read those lines: a wrong id looks the same.
+
 ## Development setup
 
 ```sh
