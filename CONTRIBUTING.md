@@ -73,6 +73,9 @@ a legacy one (user settings, **Display**) when you touch `loader.js`.
 
 ## Pull requests
 
+`main` is protected: every change goes through a pull request, and the **Build and test** check
+must pass before it can merge.
+
 1. Fork and branch from `main`.
 2. Add tests for catalog changes.
 3. Make sure `dotnet build -c Release` and `dotnet test` pass.
@@ -82,9 +85,10 @@ a legacy one (user settings, **Display**) when you touch `loader.js`.
 
 Maintainers only:
 
-1. Update `version` and `changelog` in `build.yaml`, and the versions in `Directory.Build.props`.
-2. Add the release to `CHANGELOG.md`.
-3. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
+1. In a pull request, update `version` and `changelog` in `build.yaml` and the versions in
+   `Directory.Build.props`, and add the release to `CHANGELOG.md`.
+2. Once it is merged, tag `main` and push the tag:
+   `git switch main && git pull && git tag v0.2.0 && git push origin v0.2.0`.
 
 The release workflow builds the zip, creates the GitHub release and updates the plugin
 repository manifest on the `gh-pages` branch.
