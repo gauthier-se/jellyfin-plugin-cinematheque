@@ -6,6 +6,8 @@ four-part plugin versioning.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-01
+
 ### Added
 
 - 13 new built-in movements: Soviet Montage, French Poetic Realism, Film Noir, Indian Parallel
@@ -111,7 +113,8 @@ four-part plugin versioning.
 - Cinematheque tab in the modern and legacy web client layouts, through File Transformation.
 - English and French interface.
 
-[Unreleased]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gauthier-se/jellyfin-plugin-cinematheque/releases/tag/v0.1.0

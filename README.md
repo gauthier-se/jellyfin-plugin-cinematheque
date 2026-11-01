@@ -8,7 +8,7 @@ by national cinema and by film movement.
 
 [![CI](https://github.com/gauthier-se/jellyfin-plugin-cinematheque/actions/workflows/ci.yml/badge.svg)](https://github.com/gauthier-se/jellyfin-plugin-cinematheque/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/gauthier-se/jellyfin-plugin-cinematheque)](https://github.com/gauthier-se/jellyfin-plugin-cinematheque/releases/latest)
-[![Jellyfin 12.1](https://img.shields.io/badge/Jellyfin-12.1-00a4dc)](https://jellyfin.org)
+[![Jellyfin 12.1 or later](https://img.shields.io/badge/Jellyfin-12.1%2B-00a4dc)](https://jellyfin.org)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
 ![Directors in the Cinematheque tab](docs/screenshots/directors.jpg)
@@ -53,7 +53,7 @@ available in English and French, and country names follow the user's language.
 
 ## Requirements
 
-- Jellyfin **12.1**
+- Jellyfin **12.1** or later. Built against 12.1, tried on 12.2 and 12.4.
 - The [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation)
   plugin, which lets plugins add to the web client without modifying its files.
   Without it the API still works, but the tab does not appear.
