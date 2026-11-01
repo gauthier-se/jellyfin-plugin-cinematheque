@@ -165,21 +165,35 @@ public class CinemathequeController : ControllerBase
         }
 
         IReadOnlySet<Guid> seen = _catalogProvider.GetSeen(user);
-        return Ok(_catalogProvider.GetCatalog(user).GetMovements()
-            .Select(m =>
-            {
-                (string name, string description) = m.Movement.Localize(language);
-                return new MovementDto(
-                    m.Movement.Id,
-                    name,
-                    description,
-                    m.Movement.YearFrom,
-                    m.Movement.YearTo,
-                    Catalog.Country.FromLocations(m.Movement.Countries).Select(ToDto).ToArray(),
-                    m.FilmCount,
-                    m.FilmIds.Count(seen.Contains));
-            })
-            .ToArray());
+        return Ok(_catalogProvider.GetCatalog(user).GetMovements().Select(m => ToDto(m, language, seen)).ToArray());
+    }
+
+    /// <summary>
+    /// Gets one movement, with its leading directors and the essential films the user does not have.
+    /// </summary>
+    /// <param name="id">The movement id.</param>
+    /// <param name="language">The language to name it in, such as <c>fr</c>. English when unset or untranslated.</param>
+    /// <returns>The movement, or 404 when no movement has that id.</returns>
+    [HttpGet("Movements/{id}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<MovementDetailDto> GetMovement([FromRoute] string id, [FromQuery] string? language)
+    {
+        User? user = GetUser();
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        MovementSummary? movement = _catalogProvider.GetCatalog(user).GetMovements()
+            .FirstOrDefault(m => string.Equals(m.Movement.Id, id, StringComparison.OrdinalIgnoreCase));
+        return movement is null
+            ? NotFound()
+            : Ok(new MovementDetailDto(
+                ToDto(movement, language, _catalogProvider.GetSeen(user)),
+                movement.Directors.Select(d => new PersonLinkDto(d.Key, d.Name)).ToArray(),
+                movement.EssentialCount,
+                movement.MissingEssentials.Select(f => new EssentialFilmDto(f.TmdbId.Trim(), f.Localize(language), f.Year)).ToArray()));
     }
 
     /// <summary>
@@ -281,6 +295,20 @@ public class CinemathequeController : ControllerBase
             seen.Contains(film.Id));
 
     private static CountryDto ToDto(Catalog.Country country) => new CountryDto(country.Code, country.Name);
+
+    private static MovementDto ToDto(MovementSummary movement, string? language, IReadOnlySet<Guid> seen)
+    {
+        (string name, string description) = movement.Movement.Localize(language);
+        return new MovementDto(
+            movement.Movement.Id,
+            name,
+            description,
+            movement.Movement.YearFrom,
+            movement.Movement.YearTo,
+            Catalog.Country.FromLocations(movement.Movement.Countries).Select(ToDto).ToArray(),
+            movement.FilmCount,
+            movement.FilmIds.Count(seen.Contains));
+    }
 
     private static PersonRole? ParseRole(string? role) => role?.Trim().ToUpperInvariant() switch
     {

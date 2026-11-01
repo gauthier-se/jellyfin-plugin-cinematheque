@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Jellyfin.Plugin.Cinematheque.Catalog;
 using Jellyfin.Plugin.Cinematheque.Configuration;
@@ -61,11 +62,53 @@ public partial class DefaultMovementsTests
         MovementDefinition movement = Find(id);
 
         Assert.True(
-            movement.Countries.Length + movement.Directors.Length + movement.Genres.Length + movement.TmdbIds.Length > 0,
+            movement.Countries.Length + movement.Directors.Length + movement.Genres.Length + movement.Essentials.Length > 0,
             $"{id} has no rule and no film.");
     }
 
+    [Theory]
+    [MemberData(nameof(Ids))]
+    public void Essentials_are_complete_and_chronological(string id)
+    {
+        EssentialFilm[] essentials = Find(id).Essentials;
+
+        Assert.True(essentials.Length >= 10, $"{id} lists {essentials.Length} essential films.");
+        Assert.All(essentials, film =>
+        {
+            Assert.Matches(Number(), film.TmdbId);
+            Assert.False(string.IsNullOrWhiteSpace(film.Title));
+            Assert.NotNull(film.Year);
+        });
+        Assert.Equal(essentials.OrderBy(f => f.Year), essentials);
+    }
+
+    [Theory]
+    [MemberData(nameof(Ids))]
+    public void Film_lists_do_not_contradict_each_other(string id)
+    {
+        MovementDefinition movement = Find(id);
+        string[] included = [.. movement.Essentials.Select(f => f.TmdbId), .. movement.TmdbIds];
+
+        Assert.All(movement.TmdbIds.Concat(movement.ExcludedTmdbIds), tmdbId => Assert.Matches(Number(), tmdbId));
+        Assert.Equal(included.Length, included.Distinct(StringComparer.Ordinal).Count());
+        Assert.Empty(included.Intersect(movement.ExcludedTmdbIds, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Every_film_list_belongs_to_a_movement()
+    {
+        using Stream stream = typeof(DefaultMovements).Assembly.GetManifestResourceStream("Jellyfin.Plugin.Cinematheque.Configuration.MovementFilms.json")!;
+        using JsonDocument document = JsonDocument.Parse(stream);
+
+        Assert.Equal(
+            _movements.Select(m => m.Id).Order(StringComparer.Ordinal),
+            document.RootElement.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal));
+    }
+
     private static MovementDefinition Find(string id) => _movements.Single(m => m.Id == id);
+
+    [GeneratedRegex("^[0-9]+$")]
+    private static partial Regex Number();
 
     [GeneratedRegex("^[a-z0-9]+(-[a-z0-9]+)*$")]
     private static partial Regex UrlSafe();

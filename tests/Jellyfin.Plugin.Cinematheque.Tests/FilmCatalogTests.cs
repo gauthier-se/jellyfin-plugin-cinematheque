@@ -123,6 +123,38 @@ public class FilmCatalogTests
     }
 
     [Fact]
+    public void Movements_list_their_directors_most_represented_first()
+    {
+        MovementDefinition movement = MovementDefinition.Create("hb", "Heroic Bloodshed", string.Empty, ["HK"], (1986, 1998), []);
+        FilmCatalog catalog = new(
+            [
+                Film("Full Contact", 1992, ["Hong Kong"], ["Ringo Lam"]),
+                Film("The Killer", 1989, ["Hong Kong"], ["John Woo"]),
+                Film("Hard Boiled", 1992, ["Hong Kong"], ["John Woo"]),
+                Film("Yi Yi", 2000, ["Taiwan"], ["Edward Yang"]),
+            ],
+            [movement]);
+
+        Assert.Equal(["John Woo", "Ringo Lam"], catalog.GetMovements()[0].Directors.Select(d => d.Name));
+    }
+
+    [Fact]
+    public void Movements_report_the_essentials_missing_from_the_library()
+    {
+        MovementDefinition movement = new()
+        {
+            Id = "dogme",
+            Essentials = [new EssentialFilm { TmdbId = "309", Title = "The Celebration", Year = 1998 }, new EssentialFilm { TmdbId = "452", Title = "The Idiots", Year = 1998 }],
+        };
+
+        MovementSummary summary = new FilmCatalog([Film("Festen", 1998, tmdbId: "309")], [movement]).GetMovements()[0];
+
+        Assert.Equal(1, summary.FilmCount);
+        Assert.Equal(2, summary.EssentialCount);
+        Assert.Equal(["The Idiots"], summary.MissingEssentials.Select(f => f.Title));
+    }
+
+    [Fact]
     public void CountByDecade_skips_films_without_a_year()
     {
         var decades = FilmCatalog.CountByDecade([Film("A", 1961), Film("B", 1969), Film("C"), Film("D", 1970)]);

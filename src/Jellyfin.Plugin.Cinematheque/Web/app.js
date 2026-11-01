@@ -37,6 +37,7 @@
       openInJellyfin: 'Open in Jellyfin',
       topDirectors: 'Leading directors',
       noMovementFilms: 'None in your library',
+      missingEssentials: 'Essentials missing from your library',
       minimum: 'Minimum number of films',
       defaultMin: 'Default minimum',
       seen: '{0} seen',
@@ -67,6 +68,7 @@
       openInJellyfin: 'Ouvrir dans Jellyfin',
       topDirectors: 'Principaux réalisateurs',
       noMovementFilms: 'Aucun dans votre bibliothèque',
+      missingEssentials: 'Essentiels absents de votre bibliothèque',
       minimum: 'Nombre minimum de films',
       defaultMin: 'Minimum par défaut',
       seen: '{0} vus',
@@ -795,16 +797,39 @@
     });
   }
 
+  // Films the library does not have, so the links leave for TMDB.
+  function missingEssentials(films) {
+    return h('div', { class: 'cin-related cin-essentials' },
+      h('h3', { class: 'cin-subtitle', text: t('missingEssentials') }),
+      h('div', { class: 'cin-chips' }, films.map(function (film) {
+        return h('a', {
+          class: 'cin-chip',
+          href: 'https://www.themoviedb.org/movie/' + encodeURIComponent(film.TmdbId),
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          text: film.Year ? film.Title + ' (' + film.Year + ')' : film.Title
+        });
+      })));
+  }
+
   function movementView(route) {
-    return Promise.all([api('Movements', { language: language() }), filmsSection(route, { movement: route.movement })]).then(function (results) {
-      var movement = results[0].find(function (m) { return m.Id === route.movement; }) || { Name: route.movement, Description: '', Countries: [] };
+    var details = api('Movements/' + encodeURIComponent(route.movement), { language: language() }).catch(function () { return null; });
+    return Promise.all([details, filmsSection(route, { movement: route.movement })]).then(function (results) {
+      var detail = results[0] || { Movement: { Name: route.movement, Description: '', Countries: [] }, Directors: [], MissingEssentials: [] };
+      var movement = detail.Movement;
       return h('div', null,
         h('div', { class: 'cin-hero' },
           h('a', { class: 'cin-back', href: href({ view: 'movements' }), text: '← ' + t('movements') }),
           h('h2', { class: 'cin-hero-title', text: movement.Name }),
           h('p', { class: 'cin-movement-period', text: [years(movement.YearFrom, movement.YearTo), movement.Countries.map(countryName).join(', ')].filter(Boolean).join(' · ') }),
           movement.Description ? h('p', { class: 'cin-hero-text', text: movement.Description }) : null),
-        results[1]);
+        detail.Directors.length ? h('div', { class: 'cin-related' },
+          h('h3', { class: 'cin-subtitle', text: t('topDirectors') }),
+          h('div', { class: 'cin-chips' }, detail.Directors.map(function (director) {
+            return h('a', { class: 'cin-chip', href: href({ view: 'director', person: director.Key, name: director.Name }), text: director.Name });
+          }))) : null,
+        results[1],
+        detail.MissingEssentials.length ? missingEssentials(detail.MissingEssentials) : null);
     });
   }
 
