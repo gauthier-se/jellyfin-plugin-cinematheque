@@ -27,10 +27,11 @@ by national cinema and by film movement.
   separate from their successors. Co-productions count under every partner by default, or
   under their first listed country only, which keeps a Hollywood film with Hong Kong money out
   of Hong Kong cinema.
-- **Movements.** Curated movements such as German Expressionism, Italian Neorealism, the
-  French New Wave, the Japanese New Wave, the Hong Kong New Wave or Taiwan New Cinema,
-  matched against your library by country, period and director. Administrators can edit
-  them or add their own.
+- **Movements.** 26 curated movements, from German Expressionism and Soviet Montage to film
+  noir, the French New Wave, Taiwan New Cinema and the Romanian New Wave, matched against your
+  library by country, period and director or by a list of films. Each one shows its leading
+  directors and the essential films you do not have yet. Administrators can edit them or add
+  their own.
 - **Your progress.** Every director, actor, country and movement shows how many of its films
   you have watched, posters you have seen carry a check mark, and lists can be narrowed to the
   films you have not seen yet.
@@ -100,7 +101,8 @@ ones you do not want, or add your own. Only your changes are saved, and an impor
 is there for bulk edits.
 
 In JSON, a movement looks like this. A film belongs to it when its TMDB id is listed in
-`TmdbIds`, or when it matches every rule that is set:
+`TmdbIds` or `Essentials`, or when it matches every rule that is set, unless its TMDB id is in
+`ExcludedTmdbIds`:
 
 ```json
 {
@@ -113,7 +115,11 @@ In JSON, a movement looks like this. A film belongs to it when its TMDB id is li
   "Directors": ["Chang Cheh", "King Hu", "Chor Yuen", "Lau Kar-leung"],
   "Genres": ["Action"],
   "Tags": [],
-  "TmdbIds": []
+  "TmdbIds": [],
+  "ExcludedTmdbIds": [],
+  "Essentials": [
+    { "TmdbId": "40081", "Title": "Come Drink with Me", "Year": 1966 }
+  ]
 }
 ```
 
@@ -123,9 +129,17 @@ In JSON, a movement looks like this. A film belongs to it when its TMDB id is li
   (`Johnnie To (tmdb:25236)`). The id matches the person whatever script their credits use,
   such as `杜琪峯`; names are compared without accents or punctuation, so `Nagisa Oshima`
   matches `Nagisa Ōshima`.
-- `Genres`, `Tags`: any of them qualifies, compared like names.
+- `Genres`, `Tags`: any of them qualifies, compared like names. Genres come from your metadata
+  language, so `Horror` does not match `Horreur`: list both if your libraries mix languages.
+- `TmdbIds`: films that belong whatever the rules, for a director who only touched the
+  movement with one film.
+- `ExcludedTmdbIds`: films left out whatever the rest says, for the false positives of a rule.
+- `Essentials`: the films that define the movement. They belong to it whatever the rules, and
+  its page lists the ones missing from the library, with a link to TMDB. `Year` and `Translations`
+  are optional. A film is recognized by its TMDB id, so one without an id shows as missing.
+  `Essentials` can only be edited as JSON.
 - An empty list means "no rule". A movement with no country, director, genre or tag rule
-  only matches its `TmdbIds`.
+  only matches its `TmdbIds` and `Essentials`.
 
 ## API
 
@@ -137,6 +151,7 @@ The tab is a client for a small REST API, available to any authenticated user:
 | `GET /Cinematheque/People/{role}/{key}` | One person, by key (`tmdb:25236`) or name, with their years and countries |
 | `GET /Cinematheque/Countries` | Countries with film counts, decades and leading directors; `primaryOnly` counts each film under its first country |
 | `GET /Cinematheque/Movements` | Movements with film counts, named in `language` when translated |
+| `GET /Cinematheque/Movements/{id}` | One movement, with its leading directors and the essential films the user does not have |
 | `GET /Cinematheque/Films` | Films filtered by `country` (with `primaryCountry`), `person` (a key such as `tmdb:25236`, or a name) with `role`, `movement`, `decade`, `unseen` |
 | `GET /Cinematheque/Films/Random` | One film picked among the same filters, preferring films the user has not watched |
 
