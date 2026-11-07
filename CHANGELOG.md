@@ -18,6 +18,8 @@ four-part plugin versioning.
 ### Changed
 
 - The scheduled task is now called **Sync collections**.
+- A collection is no longer emptied when its movement finds no films, which is more often a
+  library offline than a movement meant to be empty: it stays as it was.
 
 ## [0.4.0] - 2026-11-01
 

@@ -155,8 +155,43 @@ public sealed class PersonCollectionSyncTests : IDisposable
         Assert.True(await _sync.RemovePersonAsync(entry, deleteCollection: false, CancellationToken.None));
 
         Assert.Empty(_server.Plugin.Configuration.CollectedPeople);
-        Assert.Empty(_server.Plugin.Configuration.ManagedCollections);
         _server.Library.DidNotReceive().DeleteItem(Arg.Any<BaseItem>(), Arg.Any<DeleteOptions>(), Arg.Any<bool>());
+    }
+
+    [Fact]
+    public async Task A_person_added_back_gets_their_kept_collection_again()
+    {
+        CollectedPerson entry = await AddAsync(PersonRole.Director, "King Hu");
+        await _sync.RemovePersonAsync(entry, deleteCollection: false, CancellationToken.None);
+
+        CollectedPerson again = await AddAsync(PersonRole.Director, "King Hu");
+
+        await _collections.Received(1).CreateCollectionAsync(Arg.Any<CollectionCreationOptions>());
+        Assert.Equal(PersonCollectionStatus.Synced, _sync.Describe(again, Find(PersonRole.Director, "King Hu")).Status);
+    }
+
+    [Fact]
+    public async Task A_person_added_by_name_is_not_added_again_once_they_have_a_tmdb_id()
+    {
+        await AddAsync(PersonRole.Director, "King Hu");
+        _server.AddPerson("King Hu", tmdbId: "123");
+        Assert.Equal("tmdb:123", Find(PersonRole.Director, "King Hu")?.Key);
+
+        await AddAsync(PersonRole.Director, "King Hu");
+
+        Assert.Equal(["director:name:kinghu"], _server.Plugin.Configuration.CollectedPeople.Select(p => p.Identity));
+        await _collections.Received(1).CreateCollectionAsync(Arg.Any<CollectionCreationOptions>());
+    }
+
+    [Fact]
+    public void A_person_not_added_yet_is_pending_and_one_without_films_has_no_collection()
+    {
+        CollectedPerson kingHu = CollectedPerson.For(PersonRole.Director, Find(PersonRole.Director, "King Hu")!);
+        CollectedPerson nobody = new() { Role = PersonRole.Director, Person = "Nobody", Name = "Nobody" };
+
+        Assert.Equal(PersonCollectionStatus.Pending, _sync.Describe(kingHu, Find(PersonRole.Director, "King Hu")).Status);
+        Assert.Equal(PersonCollectionStatus.NoFilms, _sync.Describe(nobody, null).Status);
+        Assert.Equal("Directed by Nobody", _sync.Describe(nobody, null).CollectionName);
     }
 
     [Fact]

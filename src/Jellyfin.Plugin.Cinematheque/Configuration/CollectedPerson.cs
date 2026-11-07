@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Jellyfin.Plugin.Cinematheque.Catalog;
 
 namespace Jellyfin.Plugin.Cinematheque.Configuration;
@@ -88,10 +90,17 @@ public class CollectedPerson
     }
 
     /// <summary>
-    /// Finds the person in a catalog, by TMDB id first so a namesake never takes their place.
+    /// Finds the person in a catalog, never a namesake.
     /// </summary>
     /// <param name="catalog">The catalog.</param>
-    /// <returns>The person, or <c>null</c> when they have no films in this role.</returns>
+    /// <returns>The person, or <c>null</c> when they have no films in this role or cannot be
+    /// told apart from a namesake.</returns>
+    /// <remarks>
+    /// <see cref="FilmCatalog.FindPerson"/> settles for the most prolific namesake, which suits a
+    /// link but would fill a collection with someone else's films. Here the key must match. The
+    /// one exception is a person added by name who has gained a TMDB id since: their key changed,
+    /// so the name is accepted when a single person in the role goes by it.
+    /// </remarks>
     public PersonSummary? Resolve(FilmCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
@@ -102,8 +111,19 @@ public class CollectedPerson
             return null;
         }
 
-        return (person.TmdbId is null ? null : catalog.FindPerson(Role, PersonRef.TmdbPrefix + person.TmdbId))
-            ?? catalog.FindPerson(Role, Person);
+        string key = PersonKey;
+        IReadOnlyList<PersonSummary> people = catalog.GetPeople(Role);
+        PersonSummary? exact = people.FirstOrDefault(p => string.Equals(p.Key, key, StringComparison.Ordinal));
+        if (exact is not null || person.TmdbId is not null)
+        {
+            return exact;
+        }
+
+        PersonSummary[] sameName = people
+            .Where(p => p.Spellings.Any(s => string.Equals(Names.Key(s), person.NameKey, StringComparison.Ordinal)))
+            .Take(2)
+            .ToArray();
+        return sameName.Length == 1 ? sameName[0] : null;
     }
 
     /// <summary>

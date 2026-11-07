@@ -82,7 +82,7 @@
       coproductions: 'Inclure les coproductions',
       createCollection: 'Créer une collection',
       openCollection: 'Ouvrir la collection',
-      collectionPending: 'Collection non créée : voir les réglages du plugin',
+      collectionPending: 'Collection non créée\u00a0: voir les réglages du plugin',
       collectionError: 'La collection n\'a pas pu être créée.'
     }
   };

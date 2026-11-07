@@ -76,6 +76,21 @@ public class CollectionSyncTests
         Assert.Equal(["kung-fu", "wuxia"], ManagedMovements());
     }
 
+    [Fact]
+    public async Task A_collection_recorded_by_an_earlier_version_is_synced_rather_than_created_again()
+    {
+        BoxSet existing = new() { Id = Guid.NewGuid(), Name = "Shaw Brothers wuxia", IsLocked = true };
+        _server.Add(existing);
+        _server.Plugin.Configuration.ManagedCollections = [new MovementCollectionLink { MovementId = "wuxia", CollectionId = existing.Id }];
+        _server.Plugin.Configuration.MigrateCollectionLinks();
+
+        await SyncAsync();
+
+        await _collections.Received(1).CreateCollectionAsync(Arg.Any<CollectionCreationOptions>());
+        await _collections.Received().AddToCollectionAsync(existing.Id, Arg.Any<IEnumerable<Guid>>());
+        Assert.Equal(["kung-fu", "wuxia"], ManagedMovements());
+    }
+
     private void PosterFails(Exception exception)
         => _providers.SaveImage(Arg.Any<BaseItem>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ImageType>(), Arg.Any<int?>(), Arg.Any<bool?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(exception);

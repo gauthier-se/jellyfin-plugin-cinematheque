@@ -33,7 +33,8 @@ namespace Jellyfin.Plugin.Cinematheque.Library;
 /// <see cref="PluginConfiguration.ManagedCollections"/>. Their contents follow the movement's
 /// rules or the person's films, so films added to them by hand are removed on the next sync.</item>
 /// <item>Nothing is deleted, except the collection of a person the administrator removes and
-/// asks to delete. A hidden or removed movement keeps its collection as it was.</item>
+/// asks to delete. A hidden or removed movement keeps its collection as it was, and a
+/// collection is never emptied: a source without films leaves it as it was.</item>
 /// <item>An existing collection with the same name is left alone and its source is skipped.</item>
 /// <item>Collections are locked, which keeps internet providers from renaming them.</item>
 /// <item>A collection without a poster gets one: the person's portrait, or four posters of its
@@ -140,8 +141,16 @@ public sealed class CollectionSync : IDisposable
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            // From every film on the server, as the scheduled sync would: the person passed in is
+            // what one administrator can see.
+            FilmCatalog catalog = _catalogProvider.BuildServerCatalog();
+
+            // Someone added by name who has gained a TMDB id since has a new identity, but is the
+            // same person: a second entry could never get its collection, whose name is taken.
             PluginConfiguration configuration = plugin.Configuration;
-            CollectedPerson? existing = Array.Find(configuration.CollectedPeople ?? [], p => p.Identity == entry.Identity);
+            CollectedPerson? existing = Array.Find(
+                configuration.CollectedPeople ?? [],
+                p => p.Identity == entry.Identity || (p.Role == role && p.Resolve(catalog)?.Key == person.Key));
             if (existing is null)
             {
                 configuration.CollectedPeople = [.. configuration.CollectedPeople ?? [], entry];
@@ -153,10 +162,7 @@ public sealed class CollectionSync : IDisposable
                 entry = existing;
             }
 
-            // From every film on the server, as the scheduled sync would: the person passed in is
-            // what one administrator can see.
-            CollectionTarget target = PersonTarget(entry, _catalogProvider.BuildServerCatalog());
-            await SyncLockedAsync(plugin, [target], new Progress<double>(), cancellationToken).ConfigureAwait(false);
+            await SyncLockedAsync(plugin, [PersonTarget(entry, catalog)], new Progress<double>(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -188,9 +194,15 @@ public sealed class CollectionSync : IDisposable
                 return false;
             }
 
+            // A collection that stays keeps its link: unlisted, it is no longer synced, and adding
+            // the person back picks it up again rather than finding its name taken.
             MovementCollectionLink? link = Array.Find(configuration.ManagedCollections ?? [], c => c.Key == entry.CollectionKey);
             configuration.CollectedPeople = people.Where(p => p.Identity != entry.Identity).ToArray();
-            configuration.ManagedCollections = (configuration.ManagedCollections ?? []).Where(c => c != link).ToArray();
+            if (deleteCollection)
+            {
+                configuration.ManagedCollections = (configuration.ManagedCollections ?? []).Where(c => c != link).ToArray();
+            }
+
             plugin.SaveConfiguration();
 
             if (deleteCollection && link is not null && _libraryManager.GetItemById(link.CollectionId) is BoxSet collection)
@@ -328,9 +340,15 @@ public sealed class CollectionSync : IDisposable
             // Recorded before the poster, which is the step most likely to fail.
             created[target.Key] = collection.Id;
         }
-        else
+        else if (target.FilmIds.Count > 0)
         {
             await UpdateAsync(collection, target, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            // No films is more often a library offline or a person not told apart from a
+            // namesake than a collection meant to be empty: leave it as it was.
+            _logger.LogWarning("No films found for the {CollectionName} collection, so Cinematheque leaves it as it was", collection.Name);
         }
 
         await EnsurePosterAsync(collection, target, cancellationToken).ConfigureAwait(false);

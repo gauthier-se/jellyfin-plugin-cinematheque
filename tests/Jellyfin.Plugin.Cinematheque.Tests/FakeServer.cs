@@ -95,13 +95,26 @@ internal sealed class FakeServer
     }
 
     /// <summary>
-    /// Adds the person item of someone credited, with a portrait.
+    /// Adds the person item of someone credited, with a portrait and their TMDB id, and tells
+    /// the catalogs as the server would.
     /// </summary>
-    public Person AddPerson(string name, string portrait)
+    public Person AddPerson(string name, string? portrait = null, string? tmdbId = null)
     {
-        Person person = new() { Id = Guid.NewGuid(), Name = name, ImageInfos = [new ItemImageInfo { Type = ImageType.Primary, Path = portrait }] };
+        Person person = new() { Id = Guid.NewGuid(), Name = name };
+        if (portrait is not null)
+        {
+            person.ImageInfos = [new ItemImageInfo { Type = ImageType.Primary, Path = portrait }];
+        }
+
+        if (tmdbId is not null)
+        {
+            person.SetProviderId(MetadataProvider.Tmdb, tmdbId);
+        }
+
         Add(person);
         Library.GetPerson(name).Returns(person);
+        Library.GetPersonId(name).Returns(person.Id);
+        Library.ItemUpdated += Raise.Event<EventHandler<ItemChangeEventArgs>>(Library, new ItemChangeEventArgs { Item = person });
         return person;
     }
 
