@@ -1,7 +1,7 @@
 ---
 name: "Cinematheque"
 guid: "6f86a1dd-c4dc-4aa6-a445-8f19be1087c1"
-version: "0.4.0.0"
+version: "0.5.0.0"
 targetAbi: "12.1.0.0"
 framework: "net10.0"
 overview: "Browse your films by director, actor, country and film movement"
@@ -17,7 +17,7 @@ imageUrl: "https://raw.githubusercontent.com/gauthier-se/jellyfin-plugin-cinemat
 artifacts:
   - "Jellyfin.Plugin.Cinematheque.dll"
 changelog: >
-  Adds 13 movements, 26 in all, and about 60 directors to the existing ones. Every built-in
-  now lists its essential films, and its page shows the ones missing from your library and
-  its leading directors. Movements can exclude films. A movement you edited keeps your
-  version until you restore it. See CHANGELOG.md.
+  Administrators can give directors, actors and screenwriters a collection of their films,
+  picked one by one in the plugin settings or from their page in the tab, named after the
+  role and with their portrait as poster. A collection is no longer emptied when its source
+  finds no films. See CHANGELOG.md.
