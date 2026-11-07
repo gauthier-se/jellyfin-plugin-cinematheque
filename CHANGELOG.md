@@ -6,6 +6,19 @@ four-part plugin versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Collections of people: administrators pick directors, actors and screenwriters, in the plugin
+  settings or from their page in the tab, and each gets a Jellyfin collection of their films,
+  named after the role ("Directed by Akira Kurosawa", "Réalisé par Akira Kurosawa") with their
+  portrait as poster. They follow the library like movement collections, without depending on
+  that option. Removing a person keeps their collection unless you ask to delete it.
+- `GET`, `POST` and `DELETE /Cinematheque/PersonCollections`, for administrators.
+
+### Changed
+
+- The scheduled task is now called **Sync collections**.
+
 ## [0.4.0] - 2026-11-01
 
 ### Added
