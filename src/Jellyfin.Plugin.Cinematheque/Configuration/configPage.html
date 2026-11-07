@@ -5,7 +5,7 @@
   <title>Cinematheque</title>
 </head>
 <body>
-  <div id="CinemathequeConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-textarea,emby-checkbox">
+  <div id="CinemathequeConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-textarea,emby-checkbox,emby-select">
     <style>
       #CinemathequeConfigPage .cin-movement { margin: 0 0 0.75em; border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 6px; }
       #CinemathequeConfigPage .cin-movement > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5em 1em; padding: 0.75em 1em; cursor: pointer; }
@@ -18,6 +18,8 @@
       #CinemathequeConfigPage .cin-actions { display: flex; flex-wrap: wrap; gap: 0.5em; margin-top: 0.5em; }
       #CinemathequeConfigPage .cin-translation { display: grid; grid-template-columns: 6em 1fr 2fr auto; gap: 0.5em; align-items: end; }
       #CinemathequeConfigPage .cin-error { color: #e57373; }
+      #CinemathequeConfigPage .cin-person { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5em 1em; margin: 0 0 0.75em; padding: 0.75em 1em; border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 6px; }
+      #CinemathequeConfigPage .cin-person .cin-actions { margin-top: 0; }
       #CinemathequeConfigPage textarea.emby-textarea { display: block; box-sizing: border-box; width: 100%; min-height: 6em; }
     </style>
     <div data-role="content">
@@ -94,6 +96,31 @@
                 hidden or this option is turned off, its collection stays as it is.
               </div>
             </div>
+
+            <h4>People</h4>
+            <p class="fieldDescription">
+              Give a director, an actor or a screenwriter a collection of their films, named after the role, such as
+              "Directed by Akira Kurosawa", with their portrait as poster. Actors only count the top of the bill set
+              above. These collections do not depend on the option above, follow the films after every library scan,
+              and apply at once: no need to press Save.
+            </p>
+            <div class="cin-row">
+              <div class="selectContainer">
+                <label class="selectLabel" for="PersonRole">Role</label>
+                <select id="PersonRole" is="emby-select" class="emby-select-withcolor emby-select">
+                  <option value="directors">Director</option>
+                  <option value="actors">Actor</option>
+                  <option value="writers">Screenwriter</option>
+                </select>
+              </div>
+              <div class="inputContainer">
+                <label class="inputLabel inputLabelUnfocused" for="PersonSearch">Name</label>
+                <input id="PersonSearch" type="search" is="emby-input" autocomplete="off" />
+              </div>
+            </div>
+            <div id="PersonResults" class="cin-actions"></div>
+            <p id="PeopleError" class="cin-error" role="alert" hidden></p>
+            <div id="PersonCollectionList" style="margin-top: 1em;"></div>
           </div>
 
           <div>
@@ -388,6 +415,134 @@
           return null;
         }
 
+        // ---------------------------------------------------------- people
+
+        // Saved by their own API calls, not by the form: a person is added and their collection
+        // created as soon as they are picked.
+        var personList = page.querySelector('#PersonCollectionList');
+        var personResults = page.querySelector('#PersonResults');
+        var personSearch = page.querySelector('#PersonSearch');
+        var personRole = page.querySelector('#PersonRole');
+        var peopleError = page.querySelector('#PeopleError');
+        var roleNames = { directors: 'Director', actors: 'Actor', writers: 'Screenwriter' };
+        var searchTimer = null;
+
+        function personUrl(person, params) {
+          return ApiClient.getUrl('Cinematheque/PersonCollections/' + person.role + '/' + encodeURIComponent(person.key), params || {});
+        }
+
+        function showPeopleError(message, err) {
+          console.error('Cinematheque:', err);
+          peopleError.textContent = message;
+          peopleError.hidden = false;
+        }
+
+        function statusOf(person) {
+          switch (person.Status) {
+            case 'Synced': return 'Collection "' + person.CollectionName + '"';
+            case 'NameTaken': return 'Not created: a collection named "' + person.CollectionName + '" already exists';
+            case 'NoFilms': return 'Not created: no films in your library';
+            default: return 'Created at the next sync';
+          }
+        }
+
+        function renderPeople(people) {
+          if (!people.length) {
+            personList.replaceChildren(h('p', { class: 'fieldDescription', text: 'Nobody yet.' }));
+            return;
+          }
+
+          personList.replaceChildren.apply(personList, people.map(function (person) {
+            var target = { role: person.Role, key: person.Key };
+            return h('div', { class: 'cin-person' },
+              h('div', null,
+                h('span', { class: 'cin-movement-name', text: person.Name }), ' ',
+                h('span', { class: 'cin-badge', text: roleNames[person.Role] || person.Role }),
+                h('div', { class: 'cin-movement-meta', text: (person.FilmCount === 1 ? '1 film' : person.FilmCount + ' films') + ' · ' + statusOf(person) })),
+              h('div', { class: 'cin-actions' },
+                h('button', {
+                  type: 'button', class: 'raised emby-button',
+                  onclick: function () { removePerson(target, false); }
+                }, h('span', { text: person.CollectionId ? 'Stop syncing' : 'Remove' })),
+                person.CollectionId ? h('button', {
+                  type: 'button', class: 'raised emby-button',
+                  onclick: function () {
+                    if (window.confirm('Delete the collection "' + person.CollectionName + '"? The films stay in your library.')) {
+                      removePerson(target, true);
+                    }
+                  }
+                }, h('span', { text: 'Delete the collection' })) : null));
+          }));
+        }
+
+        function loadPeople() {
+          return ApiClient.getJSON(ApiClient.getUrl('Cinematheque/PersonCollections')).then(renderPeople).catch(function (err) {
+            showPeopleError('The people could not be loaded. Reload the page to try again.', err);
+          });
+        }
+
+        function addPerson(role, person) {
+          peopleError.hidden = true;
+          Dashboard.showLoadingMsg();
+          ApiClient.ajax({ type: 'POST', url: personUrl({ role: role, key: person.Key }), dataType: 'json' }).then(function () {
+            personSearch.value = '';
+            personResults.replaceChildren();
+            return loadPeople();
+          }).catch(function (err) {
+            showPeopleError('"' + person.Name + '" could not be added. Try again, or check the server log.', err);
+          }).finally(function () {
+            Dashboard.hideLoadingMsg();
+          });
+        }
+
+        function removePerson(target, deleteCollection) {
+          peopleError.hidden = true;
+          Dashboard.showLoadingMsg();
+          ApiClient.ajax({ type: 'DELETE', url: personUrl(target, { deleteCollection: deleteCollection }) }).then(loadPeople).catch(function (err) {
+            showPeopleError('The person could not be removed. Try again, or check the server log.', err);
+          }).finally(function () {
+            Dashboard.hideLoadingMsg();
+          });
+        }
+
+        function searchPeople() {
+          var text = personSearch.value.trim();
+          var role = personRole.value;
+          if (text.length < 2) {
+            personResults.replaceChildren();
+            return;
+          }
+
+          ApiClient.getJSON(ApiClient.getUrl('Cinematheque/People/' + role, { search: text, minFilms: 1, limit: 8 })).then(function (result) {
+            // A slower answer to an earlier search must not replace the current one.
+            if (personSearch.value.trim() !== text || personRole.value !== role) {
+              return;
+            }
+
+            personResults.replaceChildren.apply(personResults, result.Items.length
+              ? result.Items.map(function (person) {
+                return h('button', {
+                  type: 'button', class: 'raised emby-button',
+                  onclick: function () { addPerson(role, person); }
+                }, h('span', { text: person.Name + ' (' + (person.FilmCount === 1 ? '1 film' : person.FilmCount + ' films') + ')' }));
+              })
+              : [h('span', { class: 'fieldDescription', text: 'No match in your library.' })]);
+          }).catch(function (err) { console.error('Cinematheque:', err); });
+        }
+
+        personSearch.addEventListener('input', function () {
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(searchPeople, 250);
+        });
+        personRole.addEventListener('change', searchPeople);
+
+        // Enter in the search box would submit the settings form.
+        personSearch.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+          }
+        });
+
         // ---------------------------------------------------------- events
 
         // False until the settings load: saving an empty form would erase the movements.
@@ -421,7 +576,10 @@
           });
         }
 
-        page.addEventListener('pageshow', reload);
+        page.addEventListener('pageshow', function () {
+          reload();
+          loadPeople();
+        });
 
         page.querySelector('#AddMovement').addEventListener('click', function () {
           entries.push({ builtIn: null, value: { Id: '', Name: '', Description: '', Countries: [], Directors: [], Genres: [], Tags: [], TmdbIds: [], ExcludedTmdbIds: [], Essentials: [], Translations: [] }, hidden: false });

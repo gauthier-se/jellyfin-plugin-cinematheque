@@ -4,6 +4,8 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Net.Mime;
 using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Plugin.Cinematheque.Catalog;
 using Jellyfin.Plugin.Cinematheque.Configuration;
@@ -17,7 +19,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Jellyfin.Plugin.Cinematheque.Api;
 
 /// <summary>
-/// The Cinematheque API: people, countries, movements and filtered film lists.
+/// The Cinematheque API: people, countries, movements, filtered film lists and the collections
+/// of people.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -30,6 +33,7 @@ public class CinemathequeController : ControllerBase
     private const int MaxPageSize = 500;
 
     private readonly CatalogProvider _catalogProvider;
+    private readonly CollectionSync _collectionSync;
     private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
 
@@ -37,11 +41,13 @@ public class CinemathequeController : ControllerBase
     /// Initializes a new instance of the <see cref="CinemathequeController"/> class.
     /// </summary>
     /// <param name="catalogProvider">The catalog provider.</param>
+    /// <param name="collectionSync">The collection sync, for the collections of people.</param>
     /// <param name="userManager">The user manager.</param>
     /// <param name="libraryManager">The library manager.</param>
-    public CinemathequeController(CatalogProvider catalogProvider, IUserManager userManager, ILibraryManager libraryManager)
+    public CinemathequeController(CatalogProvider catalogProvider, CollectionSync collectionSync, IUserManager userManager, ILibraryManager libraryManager)
     {
         _catalogProvider = catalogProvider;
+        _collectionSync = collectionSync;
         _userManager = userManager;
         _libraryManager = libraryManager;
     }
@@ -207,6 +213,87 @@ public class CinemathequeController : ControllerBase
         => Ok(DefaultMovements.Create());
 
     /// <summary>
+    /// Lists the people mirrored into collections, with where each collection stands.
+    /// </summary>
+    /// <returns>The people, in the order they were added.</returns>
+    [HttpGet("PersonCollections")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<IReadOnlyList<PersonCollectionDto>> GetPersonCollections()
+    {
+        User? user = GetUser();
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        FilmCatalog catalog = _catalogProvider.GetCatalog(user);
+        return Ok((Configuration.CollectedPeople ?? []).Where(p => p.Identity.Length > 0).Select(p => ToDto(p, catalog)).ToArray());
+    }
+
+    /// <summary>
+    /// Mirrors a person into a collection, and creates it right away.
+    /// </summary>
+    /// <param name="role">The role whose films make the collection: <c>directors</c>, <c>actors</c> or <c>writers</c>.</param>
+    /// <param name="key">The person key, such as <c>tmdb:5026</c>, or a name.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The person, or 404 when nobody in that role matches.</returns>
+    [HttpPost("PersonCollections/{role}/{key}")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PersonCollectionDto>> AddPersonCollection([FromRoute] string role, [FromRoute] string key, CancellationToken cancellationToken)
+    {
+        User? user = GetUser();
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        FilmCatalog catalog = _catalogProvider.GetCatalog(user);
+        if (ParseRole(role) is not PersonRole parsed || catalog.FindPerson(parsed, key) is not PersonSummary person)
+        {
+            return NotFound();
+        }
+
+        CollectedPerson entry = await _collectionSync.AddPersonAsync(parsed, person, cancellationToken).ConfigureAwait(false);
+        return Ok(ToDto(entry, catalog));
+    }
+
+    /// <summary>
+    /// Stops mirroring a person into a collection.
+    /// </summary>
+    /// <param name="role">The role: <c>directors</c>, <c>actors</c> or <c>writers</c>.</param>
+    /// <param name="key">The person key, as listed by <see cref="GetPersonCollections"/>.</param>
+    /// <param name="deleteCollection">Also delete the collection. Otherwise it stays as it is.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>204, or 404 when the person is not in the list.</returns>
+    [HttpDelete("PersonCollections/{role}/{key}")]
+    [Authorize(Policy = Policies.RequiresElevation)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> RemovePersonCollection(
+        [FromRoute] string role,
+        [FromRoute] string key,
+        [FromQuery] bool deleteCollection,
+        CancellationToken cancellationToken)
+    {
+        User? user = GetUser();
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        FilmCatalog catalog = _catalogProvider.GetCatalog(user);
+        CollectedPerson? entry = ParseRole(role) is PersonRole parsed
+            ? (Configuration.CollectedPeople ?? []).FirstOrDefault(p => p.Role == parsed && PersonKeyOf(p, catalog) == key)
+            : null;
+        return entry is not null && await _collectionSync.RemovePersonAsync(entry, deleteCollection, cancellationToken).ConfigureAwait(false)
+            ? NoContent()
+            : NotFound();
+    }
+
+    /// <summary>
     /// Lists films, narrowed by any combination of filters.
     /// </summary>
     /// <param name="query">The filters.</param>
@@ -317,6 +404,26 @@ public class CinemathequeController : ControllerBase
         "WRITER" or "WRITERS" => PersonRole.Writer,
         _ => null,
     };
+
+    // The key the tab knows the person by now, which gains a TMDB id once Jellyfin finds one.
+    private static string PersonKeyOf(CollectedPerson entry, FilmCatalog catalog)
+        => entry.Resolve(catalog)?.Key ?? entry.PersonKey;
+
+    private PersonCollectionDto ToDto(CollectedPerson entry, FilmCatalog catalog)
+    {
+        PersonSummary? person = entry.Resolve(catalog);
+        string name = person?.Name ?? entry.Name;
+        PersonCollectionState state = _collectionSync.Describe(entry, person);
+        return new PersonCollectionDto(
+            entry.Role.ToString().ToLowerInvariant() + "s",
+            person?.Key ?? entry.PersonKey,
+            _libraryManager.GetPersonId(name),
+            name,
+            person?.FilmCount ?? 0,
+            state.CollectionId,
+            state.Status.ToString(),
+            state.CollectionName);
+    }
 
     private static int DefaultMinFilms(PersonRole role)
         => role == PersonRole.Actor ? Configuration.MinActorFilms : Configuration.MinDirectorFilms;
