@@ -7,8 +7,8 @@ using MediaBrowser.Model.Tasks;
 namespace Jellyfin.Plugin.Cinematheque.Library;
 
 /// <summary>
-/// The scheduled task that keeps movement collections in sync. It also runs after each library
-/// scan and after the configuration is saved.
+/// The scheduled task that keeps the Cinematheque collections in sync. It also runs after each
+/// library scan and after the configuration is saved.
 /// </summary>
 public class CollectionSyncTask : IScheduledTask
 {
@@ -24,13 +24,13 @@ public class CollectionSyncTask : IScheduledTask
     }
 
     /// <inheritdoc />
-    public string Name => "Sync movement collections";
+    public string Name => "Sync collections";
 
     /// <inheritdoc />
     public string Key => "CinemathequeCollectionSync";
 
     /// <inheritdoc />
-    public string Description => "Creates and updates a collection for each Cinematheque movement, when enabled in the plugin settings.";
+    public string Description => "Creates and updates the collections of the Cinematheque movements, when enabled, and of the people picked in the plugin settings.";
 
     /// <inheritdoc />
     public string Category => "Cinematheque";

@@ -55,7 +55,60 @@ public class PluginConfigurationTests
 
     [Fact]
     public void Migration_does_nothing_on_a_current_configuration()
-        => Assert.False(new PluginConfiguration().MigrateLegacyMovements());
+    {
+        PluginConfiguration configuration = new() { ManagedCollections = [new MovementCollectionLink { Key = "person:director:tmdb:5026" }] };
+
+        Assert.False(configuration.MigrateLegacyMovements());
+        Assert.False(configuration.MigrateCollectionLinks());
+    }
+
+    [Fact]
+    public void Migration_keys_the_collection_links_of_earlier_versions()
+    {
+        Guid collectionId = Guid.NewGuid();
+        PluginConfiguration configuration = new() { ManagedCollections = [new MovementCollectionLink { MovementId = "giallo", CollectionId = collectionId }] };
+
+        Assert.True(configuration.MigrateCollectionLinks());
+        Assert.Equal("movement:giallo", configuration.ManagedCollections[0].Key);
+        Assert.Equal(collectionId, configuration.ManagedCollections[0].CollectionId);
+    }
+
+    [Theory]
+    [InlineData("Akira Kurosawa (tmdb:5026)", "director:tmdb:5026")]
+    [InlineData("tmdb:5026", "director:tmdb:5026")]
+    [InlineData("Nagisa Ōshima", "director:name:nagisaoshima")]
+    [InlineData("", "")]
+    public void Collected_people_are_known_by_their_tmdb_id_or_their_name(string person, string expected)
+        => Assert.Equal(expected, new CollectedPerson { Role = Catalog.PersonRole.Director, Person = person }.Identity);
+
+    [Theory]
+    [InlineData(Catalog.PersonRole.Director, "en", "Directed by Agnès Varda")]
+    [InlineData(Catalog.PersonRole.Actor, "en-US", "Starring Agnès Varda")]
+    [InlineData(Catalog.PersonRole.Writer, null, "Written by Agnès Varda")]
+    [InlineData(Catalog.PersonRole.Director, "fr", "Réalisé par Agnès Varda")]
+    [InlineData(Catalog.PersonRole.Actor, "fr-CA", "Avec Agnès Varda")]
+    [InlineData(Catalog.PersonRole.Writer, "fr", "Écrit par Agnès Varda")]
+    public void Person_collections_are_named_after_the_role(Catalog.PersonRole role, string? language, string expected)
+        => Assert.Equal(expected, new CollectedPerson { Role = role }.CollectionName("Agnès Varda", language));
+
+    [Fact]
+    public void Collected_people_survive_the_xml_round_trip()
+    {
+        PluginConfiguration configuration = new()
+        {
+            CollectedPeople = [new CollectedPerson { Role = Catalog.PersonRole.Actor, Person = "Toshiro Mifune (tmdb:7450)", Name = "Toshiro Mifune" }],
+        };
+
+        XmlSerializer serializer = new(typeof(PluginConfiguration));
+        using MemoryStream stream = new();
+        serializer.Serialize(stream, configuration);
+        stream.Position = 0;
+        using XmlReader reader = XmlReader.Create(stream);
+        CollectedPerson saved = ((PluginConfiguration)serializer.Deserialize(reader)!).CollectedPeople.Single();
+
+        Assert.Equal("actor:tmdb:7450", saved.Identity);
+        Assert.Equal("Toshiro Mifune", saved.Name);
+    }
 
     [Theory]
     [InlineData("fr", "Nouvelle Vague")]

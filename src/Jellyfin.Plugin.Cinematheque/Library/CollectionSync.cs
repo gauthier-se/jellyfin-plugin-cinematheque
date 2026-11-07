@@ -22,20 +22,23 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.Cinematheque.Library;
 
 /// <summary>
-/// Mirrors each movement into a Jellyfin collection, so movements also reach the TV and mobile
-/// apps that never load the Cinematheque tab.
+/// Mirrors movements, and the people the administrator picked, into Jellyfin collections, so
+/// they also reach the TV and mobile apps that never load the Cinematheque tab.
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
-/// <item>Off by default: <see cref="PluginConfiguration.SyncCollections"/>.</item>
+/// <item>Movements are off by default: <see cref="PluginConfiguration.SyncCollections"/>. People
+/// are added one by one: <see cref="PluginConfiguration.CollectedPeople"/>.</item>
 /// <item>Only collections the plugin created are touched, tracked in
 /// <see cref="PluginConfiguration.ManagedCollections"/>. Their contents follow the movement's
-/// rules, so films added to them by hand are removed on the next sync.</item>
-/// <item>Nothing is ever deleted. A hidden or removed movement keeps its collection as it was.</item>
-/// <item>An existing collection with the same name is left alone and the movement is skipped.</item>
+/// rules or the person's films, so films added to them by hand are removed on the next sync.</item>
+/// <item>Nothing is deleted, except the collection of a person the administrator removes and
+/// asks to delete. A hidden or removed movement keeps its collection as it was.</item>
+/// <item>An existing collection with the same name is left alone and its source is skipped.</item>
 /// <item>Collections are locked, which keeps internet providers from renaming them.</item>
-/// <item>A collection without a poster gets one: four posters of its films in a grid, or the first
-/// film's poster when it has fewer. A poster set by hand is never replaced.</item>
+/// <item>A collection without a poster gets one: the person's portrait, or four posters of its
+/// films in a grid, or the first film's poster when it has fewer. A poster set by hand is never
+/// replaced.</item>
 /// </list>
 /// </remarks>
 public sealed class CollectionSync : IDisposable
@@ -77,11 +80,14 @@ public sealed class CollectionSync : IDisposable
         _logger = logger;
     }
 
+    private string Language => _serverConfigurationManager.Configuration.UICulture;
+
     /// <inheritdoc />
     public void Dispose() => _lock.Dispose();
 
     /// <summary>
-    /// Creates and updates the movement collections, when the option is on.
+    /// Creates and updates the collections of the movements, when the option is on, and of the
+    /// people the administrator added.
     /// </summary>
     /// <param name="progress">The progress, from 0 to 100.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
@@ -91,7 +97,7 @@ public sealed class CollectionSync : IDisposable
         ArgumentNullException.ThrowIfNull(progress);
 
         Plugin? plugin = Plugin.Instance;
-        if (plugin is null || !plugin.Configuration.SyncCollections)
+        if (plugin is null || (!plugin.Configuration.SyncCollections && (plugin.Configuration.CollectedPeople ?? []).Length == 0))
         {
             return;
         }
@@ -100,7 +106,18 @@ public sealed class CollectionSync : IDisposable
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await SyncLockedAsync(plugin, progress, cancellationToken).ConfigureAwait(false);
+            PluginConfiguration configuration = plugin.Configuration;
+            FilmCatalog catalog = _catalogProvider.BuildServerCatalog();
+            List<CollectionTarget> targets = [];
+            if (configuration.SyncCollections)
+            {
+                targets.AddRange(catalog.GetMovements().Select(MovementTarget));
+            }
+
+            targets.AddRange((configuration.CollectedPeople ?? [])
+                .Where(p => p.Identity.Length > 0)
+                .Select(p => PersonTarget(p, catalog)));
+            await SyncLockedAsync(plugin, targets, progress, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -108,33 +125,156 @@ public sealed class CollectionSync : IDisposable
         }
     }
 
-    private async Task SyncLockedAsync(Plugin plugin, IProgress<double> progress, CancellationToken cancellationToken)
+    /// <summary>
+    /// Adds a person to the collections, and creates theirs right away.
+    /// </summary>
+    /// <param name="role">The role whose films make the collection.</param>
+    /// <param name="person">The person.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The entry, the one already there when the person was added before.</returns>
+    public async Task<CollectedPerson> AddPersonAsync(PersonRole role, PersonSummary person, CancellationToken cancellationToken)
     {
-        string language = _serverConfigurationManager.Configuration.UICulture;
+        Plugin plugin = Plugin.Instance ?? throw new InvalidOperationException("The plugin is not loaded.");
+        CollectedPerson entry = CollectedPerson.For(role, person);
+
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            PluginConfiguration configuration = plugin.Configuration;
+            CollectedPerson? existing = Array.Find(configuration.CollectedPeople ?? [], p => p.Identity == entry.Identity);
+            if (existing is null)
+            {
+                configuration.CollectedPeople = [.. configuration.CollectedPeople ?? [], entry];
+                plugin.SaveConfiguration();
+                _logger.LogInformation("Added {PersonName} as {Role} to the Cinematheque collections", entry.Name, role);
+            }
+            else
+            {
+                entry = existing;
+            }
+
+            // From every film on the server, as the scheduled sync would: the person passed in is
+            // what one administrator can see.
+            CollectionTarget target = PersonTarget(entry, _catalogProvider.BuildServerCatalog());
+            await SyncLockedAsync(plugin, [target], new Progress<double>(), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        return entry;
+    }
+
+    /// <summary>
+    /// Removes a person from the collections.
+    /// </summary>
+    /// <param name="entry">The person, as listed in <see cref="PluginConfiguration.CollectedPeople"/>.</param>
+    /// <param name="deleteCollection">Also delete their collection. Otherwise it stays as it is.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns><c>false</c> when the person was not in the list.</returns>
+    public async Task<bool> RemovePersonAsync(CollectedPerson entry, bool deleteCollection, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        Plugin plugin = Plugin.Instance ?? throw new InvalidOperationException("The plugin is not loaded.");
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            PluginConfiguration configuration = plugin.Configuration;
+            CollectedPerson[] people = configuration.CollectedPeople ?? [];
+            if (!people.Any(p => p.Identity == entry.Identity))
+            {
+                return false;
+            }
+
+            MovementCollectionLink? link = Array.Find(configuration.ManagedCollections ?? [], c => c.Key == entry.CollectionKey);
+            configuration.CollectedPeople = people.Where(p => p.Identity != entry.Identity).ToArray();
+            configuration.ManagedCollections = (configuration.ManagedCollections ?? []).Where(c => c != link).ToArray();
+            plugin.SaveConfiguration();
+
+            if (deleteCollection && link is not null && _libraryManager.GetItemById(link.CollectionId) is BoxSet collection)
+            {
+                _libraryManager.DeleteItem(collection, new DeleteOptions { DeleteFileLocation = true }, true);
+                _logger.LogInformation("Deleted the {CollectionName} collection", collection.Name);
+            }
+
+            return true;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Tells where the collection of a person stands.
+    /// </summary>
+    /// <param name="entry">The person, as listed in <see cref="PluginConfiguration.CollectedPeople"/>.</param>
+    /// <param name="person">The person as found in a catalog, or <c>null</c> when they have no films.</param>
+    /// <returns>The state.</returns>
+    public PersonCollectionState Describe(CollectedPerson entry, PersonSummary? person)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        MovementCollectionLink? link = Array.Find(Plugin.Instance?.Configuration.ManagedCollections ?? [], c => c.Key == entry.CollectionKey);
+        if (link is not null && _libraryManager.GetItemById(link.CollectionId) is BoxSet collection)
+        {
+            return new PersonCollectionState(link.CollectionId, collection.Name, PersonCollectionStatus.Synced);
+        }
+
+        string name = entry.CollectionName(person?.Name ?? entry.Name, Language);
+        if (person is null || person.FilmCount == 0)
+        {
+            return new PersonCollectionState(null, name, PersonCollectionStatus.NoFilms);
+        }
+
+        return new PersonCollectionState(null, name, IsNameTaken(name) ? PersonCollectionStatus.NameTaken : PersonCollectionStatus.Pending);
+    }
+
+    private CollectionTarget MovementTarget(MovementSummary summary)
+        => new CollectionTarget(
+            MovementCollectionLink.MovementPrefix + summary.Movement.Id,
+            summary.Movement.Localize(Language).Name,
+            summary.FilmIds,
+            null);
+
+    private CollectionTarget PersonTarget(CollectedPerson entry, FilmCatalog catalog)
+    {
+        PersonSummary? person = entry.Resolve(catalog);
+        string name = person?.Name ?? entry.Name;
+        return new CollectionTarget(
+            entry.CollectionKey,
+            entry.CollectionName(name, Language),
+            person?.FilmIds ?? [],
+            person is null ? null : LocalPoster(_libraryManager.GetPerson(person.Name)));
+    }
+
+    private async Task SyncLockedAsync(Plugin plugin, IReadOnlyList<CollectionTarget> targets, IProgress<double> progress, CancellationToken cancellationToken)
+    {
         Dictionary<string, Guid> managed = (plugin.Configuration.ManagedCollections ?? [])
-            .Where(c => !string.IsNullOrWhiteSpace(c.MovementId))
-            .GroupBy(c => c.MovementId, StringComparer.OrdinalIgnoreCase)
+            .Where(c => !string.IsNullOrWhiteSpace(c.Key))
+            .GroupBy(c => c.Key, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Last().CollectionId, StringComparer.OrdinalIgnoreCase);
         Dictionary<string, Guid> created = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
 
-        IReadOnlyList<MovementSummary> movements = _catalogProvider.BuildServerCatalog().GetMovements();
         try
         {
-            for (int i = 0; i < movements.Count; i++)
+            for (int i = 0; i < targets.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                MovementSummary summary = movements[i];
+                CollectionTarget target = targets[i];
                 try
                 {
-                    await SyncMovementAsync(summary, managed, created, language, cancellationToken).ConfigureAwait(false);
+                    await SyncTargetAsync(target, managed, created, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    // One movement failing, on a broken poster say, must not hold back the others.
-                    _logger.LogError(ex, "Could not sync the collection of the {MovementId} movement", summary.Movement.Id);
+                    // One collection failing, on a broken poster say, must not hold back the others.
+                    _logger.LogError(ex, "Could not sync the {CollectionKey} collection", target.Key);
                 }
 
-                progress.Report(100.0 * (i + 1) / movements.Count);
+                progress.Report(100.0 * (i + 1) / targets.Count);
             }
         }
         finally
@@ -154,78 +294,84 @@ public sealed class CollectionSync : IDisposable
     {
         PluginConfiguration configuration = plugin.Configuration;
         configuration.ManagedCollections = (configuration.ManagedCollections ?? [])
-            .Where(c => !string.IsNullOrWhiteSpace(c.MovementId) && !created.ContainsKey(c.MovementId))
-            .Concat(created.Select(c => new MovementCollectionLink { MovementId = c.Key, CollectionId = c.Value }))
+            .Where(c => !string.IsNullOrWhiteSpace(c.Key) && !created.ContainsKey(c.Key))
+            .Concat(created.Select(c => new MovementCollectionLink
+            {
+                Key = c.Key,
+                MovementId = c.Key.StartsWith(MovementCollectionLink.MovementPrefix, StringComparison.Ordinal)
+                    ? c.Key[MovementCollectionLink.MovementPrefix.Length..]
+                    : string.Empty,
+                CollectionId = c.Value,
+            }))
             .ToArray();
         plugin.SaveConfiguration();
     }
 
-    private async Task SyncMovementAsync(
-        MovementSummary summary,
+    private async Task SyncTargetAsync(
+        CollectionTarget target,
         Dictionary<string, Guid> managed,
         Dictionary<string, Guid> created,
-        string language,
         CancellationToken cancellationToken)
     {
-        string movementId = summary.Movement.Id;
-        BoxSet? collection = managed.TryGetValue(movementId, out Guid collectionId)
+        BoxSet? collection = managed.TryGetValue(target.Key, out Guid collectionId)
             ? _libraryManager.GetItemById(collectionId) as BoxSet
             : null;
 
         if (collection is null)
         {
-            collection = await CreateAsync(summary, language).ConfigureAwait(false);
+            collection = await CreateAsync(target).ConfigureAwait(false);
             if (collection is null)
             {
                 return;
             }
 
             // Recorded before the poster, which is the step most likely to fail.
-            created[movementId] = collection.Id;
+            created[target.Key] = collection.Id;
         }
         else
         {
-            await UpdateAsync(collection, summary, cancellationToken).ConfigureAwait(false);
+            await UpdateAsync(collection, target, cancellationToken).ConfigureAwait(false);
         }
 
-        await EnsurePosterAsync(collection, summary, cancellationToken).ConfigureAwait(false);
+        await EnsurePosterAsync(collection, target, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<BoxSet?> CreateAsync(MovementSummary summary, string language)
-    {
-        if (summary.FilmCount == 0)
-        {
-            return null;
-        }
-
-        string name = summary.Movement.Localize(language).Name;
-        bool nameTaken = _libraryManager.GetItemList(new InternalItemsQuery
+    private bool IsNameTaken(string name)
+        => _libraryManager.GetItemList(new InternalItemsQuery
         {
             IncludeItemTypes = [BaseItemKind.BoxSet],
             Recursive = true,
             Name = name,
             DtoOptions = DtoOptions.StoredColumnsOnly,
         }).Count > 0;
-        if (nameTaken)
+
+    private async Task<BoxSet?> CreateAsync(CollectionTarget target)
+    {
+        if (target.FilmIds.Count == 0)
+        {
+            return null;
+        }
+
+        if (IsNameTaken(target.Name))
         {
             _logger.LogWarning(
-                "A collection named {CollectionName} already exists, so Cinematheque leaves it alone and does not sync the {MovementId} movement",
-                name,
-                summary.Movement.Id);
+                "A collection named {CollectionName} already exists, so Cinematheque leaves it alone and does not sync {CollectionKey}",
+                target.Name,
+                target.Key);
             return null;
         }
 
         BoxSet collection = await _collectionManager.CreateCollectionAsync(new CollectionCreationOptions
         {
-            Name = name,
+            Name = target.Name,
             IsLocked = true,
-            ItemIdList = summary.FilmIds.Select(id => id.ToString("N")).ToArray(),
+            ItemIdList = target.FilmIds.Select(id => id.ToString("N")).ToArray(),
         }).ConfigureAwait(false);
-        _logger.LogInformation("Created the {CollectionName} collection with {FilmCount} films", name, summary.FilmCount);
+        _logger.LogInformation("Created the {CollectionName} collection with {FilmCount} films", target.Name, target.FilmIds.Count);
         return collection;
     }
 
-    private async Task UpdateAsync(BoxSet collection, MovementSummary summary, CancellationToken cancellationToken)
+    private async Task UpdateAsync(BoxSet collection, CollectionTarget target, CancellationToken cancellationToken)
     {
         // Collections created before 0.2 were not locked.
         if (!collection.IsLocked)
@@ -234,7 +380,7 @@ public sealed class CollectionSync : IDisposable
             await collection.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
         }
 
-        HashSet<Guid> wanted = summary.FilmIds.ToHashSet();
+        HashSet<Guid> wanted = target.FilmIds.ToHashSet();
         HashSet<Guid> current = collection.GetLinkedChildren(DtoOptions.StoredColumnsOnly).Select(item => item.Id).ToHashSet();
 
         Guid[] toAdd = wanted.Where(id => !current.Contains(id)).ToArray();
@@ -259,32 +405,40 @@ public sealed class CollectionSync : IDisposable
         }
     }
 
-    private async Task EnsurePosterAsync(BoxSet collection, MovementSummary summary, CancellationToken cancellationToken)
+    private static string? LocalPoster(BaseItem? item)
+        => item is not null && item.HasImage(ImageType.Primary) && item.GetImageInfo(ImageType.Primary, 0).IsLocalFile
+            ? item.GetImagePath(ImageType.Primary)
+            : null;
+
+    private async Task EnsurePosterAsync(BoxSet collection, CollectionTarget target, CancellationToken cancellationToken)
     {
         if (collection.HasImage(ImageType.Primary))
         {
             return;
         }
 
-        string[] posters = summary.FilmIds
-            .Select(id => _libraryManager.GetItemById(id))
-            .Where(film => film is not null && film.HasImage(ImageType.Primary) && film.GetImageInfo(ImageType.Primary, 0).IsLocalFile)
-            .Select(film => film!.GetImagePath(ImageType.Primary))
-            .Take(4)
-            .ToArray();
-        if (posters.Length == 0)
-        {
-            return;
-        }
-
-        // Fewer than four posters would repeat in the grid; one poster alone looks better.
+        string? source = target.Portrait;
         string output = Path.Combine(_serverConfigurationManager.ApplicationPaths.TempDirectory, "cinematheque-" + collection.Id.ToString("N") + ".png");
-        string source = posters[0];
-        if (posters.Length == 4 && _imageEncoder.SupportsImageCollageCreation)
+        if (source is null)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-            _imageEncoder.CreateImageCollage(new ImageCollageOptions { InputPaths = posters, OutputPath = output, Width = 600, Height = 900 }, null);
-            source = output;
+            string[] posters = target.FilmIds
+                .Select(id => LocalPoster(_libraryManager.GetItemById(id)))
+                .OfType<string>()
+                .Take(4)
+                .ToArray();
+            if (posters.Length == 0)
+            {
+                return;
+            }
+
+            // Fewer than four posters would repeat in the grid; one poster alone looks better.
+            source = posters[0];
+            if (posters.Length == 4 && _imageEncoder.SupportsImageCollageCreation)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+                _imageEncoder.CreateImageCollage(new ImageCollageOptions { InputPaths = posters, OutputPath = output, Width = 600, Height = 900 }, null);
+                source = output;
+            }
         }
 
         try
@@ -300,4 +454,13 @@ public sealed class CollectionSync : IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// What a collection mirrors.
+    /// </summary>
+    /// <param name="Key">The key in <see cref="PluginConfiguration.ManagedCollections"/>.</param>
+    /// <param name="Name">The collection name, used when creating it.</param>
+    /// <param name="FilmIds">The films it holds.</param>
+    /// <param name="Portrait">A portrait to use as its poster, for a person.</param>
+    private sealed record CollectionTarget(string Key, string Name, IReadOnlyList<Guid> FilmIds, string? Portrait);
 }

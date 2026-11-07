@@ -67,7 +67,7 @@ internal sealed class FakeServer
     /// <summary>
     /// Adds a film, visible to every user unless <paramref name="visibleTo"/> names some.
     /// </summary>
-    public Movie AddFilm(string name, string? tmdbId = null, string[]? directors = null, string? poster = null, User[]? visibleTo = null)
+    public Movie AddFilm(string name, string? tmdbId = null, string[]? directors = null, string? poster = null, User[]? visibleTo = null, string[]? actors = null)
     {
         Movie film = new() { Id = Guid.NewGuid(), Name = name, SortName = name, ProductionYear = 1970 };
         if (tmdbId is not null)
@@ -80,7 +80,11 @@ internal sealed class FakeServer
             film.ImageInfos = [new ItemImageInfo { Type = ImageType.Primary, Path = poster }];
         }
 
-        _people[film.Id] = [.. (directors ?? []).Select(d => new PersonInfo { Name = d, Type = PersonKind.Director })];
+        _people[film.Id] =
+        [
+            .. (directors ?? []).Select(d => new PersonInfo { Name = d, Type = PersonKind.Director }),
+            .. (actors ?? []).Select(a => new PersonInfo { Name = a, Type = PersonKind.Actor }),
+        ];
         Add(film);
         if (visibleTo is not null)
         {
@@ -88,6 +92,17 @@ internal sealed class FakeServer
         }
 
         return film;
+    }
+
+    /// <summary>
+    /// Adds the person item of someone credited, with a portrait.
+    /// </summary>
+    public Person AddPerson(string name, string portrait)
+    {
+        Person person = new() { Id = Guid.NewGuid(), Name = name, ImageInfos = [new ItemImageInfo { Type = ImageType.Primary, Path = portrait }] };
+        Add(person);
+        Library.GetPerson(name).Returns(person);
+        return person;
     }
 
     public void Add(BaseItem item) => _items[item.Id] = item;

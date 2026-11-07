@@ -6,7 +6,8 @@ using MediaBrowser.Controller.Library;
 namespace Jellyfin.Plugin.Cinematheque.Library;
 
 /// <summary>
-/// Syncs movement collections at the end of each library scan, so new films join them at once.
+/// Syncs the Cinematheque collections at the end of each library scan, so new films join them
+/// at once.
 /// </summary>
 public class CollectionSyncPostScanTask : ILibraryPostScanTask
 {
