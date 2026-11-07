@@ -349,6 +349,18 @@
   font-size: 0.9rem;
 }
 
+.cin-hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1.5rem;
+}
+
+.cin-collection .cin-card-meta,
+.cin-collection .cin-error {
+  font-size: 0.9rem;
+}
+
 .cin-related {
   margin-bottom: 1.5rem;
 }

@@ -38,7 +38,9 @@ by national cinema and by film movement.
 - **Pick a film for me.** One click draws a film you have not seen from the list on screen.
 - **Collections, if you want them.** Each movement can also become a Jellyfin collection, with
   a poster drawn from its films, so it reaches the TV and mobile apps that do not load the tab.
-  Off by default.
+  Off by default. Administrators can also pick directors, actors and screenwriters one by one,
+  in the settings or from their page in the tab, to give each a collection such as
+  "Directed by Akira Kurosawa", with their portrait as poster.
 
 Everything respects each user's library access and parental controls. The interface is
 available in English and French, and country names follow the user's language.
@@ -82,12 +84,18 @@ extract it into a `Cinematheque_<version>` folder inside your Jellyfin `plugins`
 ## Configuration
 
 **Dashboard > Plugins > Cinematheque** sets how many actors per film count, the default
-minimum number of films for the people lists, the movements, and whether movements become
-collections.
+minimum number of films for the people lists, the movements, whether movements become
+collections, and which people get one.
 
-Collections are named in the server's display language and follow their movement after every
-library scan: films added to them by hand are removed. Cinematheque only touches the
-collections it created, never deletes one, and never replaces a poster you set yourself.
+Collections are named in the server's display language and follow their movement or person
+after every library scan: films added to them by hand are removed. Cinematheque only touches the
+collections it created and never replaces a poster you set yourself. It never deletes a movement
+collection; removing a person keeps theirs too, unless you choose **Delete the collection**.
+
+People are added and removed at once, without pressing **Save**, and do not depend on the
+movement collections option. A person gets one collection per role: Clint Eastwood the director
+and Clint Eastwood the actor are two collections. Actor collections count the same top of the
+bill as the tab.
 
 Collections follow Jellyfin's rules rather than the tab's. A user who can open one of the
 libraries a collection draws from sees the collection, but only the films they are allowed to
@@ -154,6 +162,15 @@ The tab is a client for a small REST API, available to any authenticated user:
 | `GET /Cinematheque/Movements/{id}` | One movement, with its leading directors and the essential films the user does not have |
 | `GET /Cinematheque/Films` | Films filtered by `country` (with `primaryCountry`), `person` (a key such as `tmdb:25236`, or a name) with `role`, `movement`, `decade`, `unseen` |
 | `GET /Cinematheque/Films/Random` | One film picked among the same filters, preferring films the user has not watched |
+
+Administrators also have:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /Cinematheque/Movements/Defaults` | The built-in movements, as shipped |
+| `GET /Cinematheque/PersonCollections` | The people who get a collection, with where each collection stands |
+| `POST /Cinematheque/PersonCollections/{role}/{key}` | Gives a person a collection in a role, and creates it right away |
+| `DELETE /Cinematheque/PersonCollections/{role}/{key}` | Stops syncing a person's collection; `deleteCollection=true` also deletes it |
 
 ## How it works
 

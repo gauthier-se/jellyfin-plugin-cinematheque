@@ -31,7 +31,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         : base(applicationPaths, xmlSerializer)
     {
         Instance = this;
-        if (Configuration.MigrateLegacyMovements())
+        // | rather than ||: both migrations run.
+        if (Configuration.MigrateLegacyMovements() | Configuration.MigrateCollectionLinks())
         {
             SaveConfiguration();
         }
@@ -39,7 +40,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         // Saving the settings may turn collections on or change movements: sync right away.
         ConfigurationChanged += (_, _) =>
         {
-            if (Configuration.SyncCollections)
+            if (Configuration.SyncCollections || Configuration.CollectedPeople?.Length > 0)
             {
                 taskManager.QueueIfNotRunning<CollectionSyncTask>();
             }

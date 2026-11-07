@@ -44,7 +44,11 @@
       unseenOnly: 'Not seen yet',
       seenBadge: 'Seen',
       pick: 'Pick a film for me',
-      coproductions: 'Include co-productions'
+      coproductions: 'Include co-productions',
+      createCollection: 'Create a collection',
+      openCollection: 'Open the collection',
+      collectionPending: 'Collection not created: see the plugin settings',
+      collectionError: 'The collection could not be created.'
     },
     fr: {
       title: 'Cinémathèque',
@@ -75,7 +79,11 @@
       unseenOnly: 'Pas encore vus',
       seenBadge: 'Vu',
       pick: 'Programme-moi un film',
-      coproductions: 'Inclure les coproductions'
+      coproductions: 'Inclure les coproductions',
+      createCollection: 'Créer une collection',
+      openCollection: 'Ouvrir la collection',
+      collectionPending: 'Collection non créée\u00a0: voir les réglages du plugin',
+      collectionError: 'La collection n\'a pas pu être créée.'
     }
   };
 
@@ -693,10 +701,52 @@
             h('a', { class: 'cin-back', href: href({ view: kind + 's' }), text: '← ' + t(kind + 's') }),
             h('h2', { class: 'cin-hero-title', text: person ? person.Name : route.name }),
             meta ? h('p', { class: 'cin-movement-period', text: meta }) : null,
-            h('a', { class: 'cin-link', href: '#', onclick: function (e) { e.preventDefault(); openPerson(person ? person.Name : route.name); }, text: t('openInJellyfin') })),
+            h('div', { class: 'cin-hero-links' },
+              h('a', { class: 'cin-link', href: '#', onclick: function (e) { e.preventDefault(); openPerson(person ? person.Name : route.name); }, text: t('openInJellyfin') }),
+              person ? collectionControl(kind + 's', person) : null)),
           results[1]);
       });
     };
+  }
+
+  // Administrators can mirror the person into a collection from here; removing one stays in the
+  // plugin settings, which also offer to delete it. Filled in once known, not to hold the page.
+  function collectionControl(role, person) {
+    var slot = h('span', { class: 'cin-collection' });
+
+    function show(entry) {
+      if (!entry) {
+        slot.replaceChildren(h('a', {
+          class: 'cin-link', href: '#',
+          onclick: function (e) {
+            e.preventDefault();
+            var url = ApiClient.getUrl('Cinematheque/PersonCollections/' + role + '/' + encodeURIComponent(person.Key));
+            ApiClient.ajax({ type: 'POST', url: url, dataType: 'json' }).then(show).catch(function (err) {
+              console.error('Cinematheque:', err);
+              slot.replaceChildren(h('span', { class: 'cin-error', text: t('collectionError') }));
+            });
+          },
+          text: t('createCollection')
+        }));
+      } else if (entry.CollectionId) {
+        slot.replaceChildren(h('a', { class: 'cin-link', href: itemHref(entry.CollectionId), text: t('openCollection') }));
+      } else {
+        slot.replaceChildren(h('span', { class: 'cin-card-meta', text: t('collectionPending') }));
+      }
+    }
+
+    ApiClient.getCurrentUser().then(function (user) {
+      if (!user || !user.Policy || !user.Policy.IsAdministrator) {
+        return null;
+      }
+
+      // Not through api(): its cache would show the button again after a creation.
+      return ApiClient.getJSON(ApiClient.getUrl('Cinematheque/PersonCollections')).then(function (entries) {
+        show(entries.find(function (entry) { return entry.Role === role && entry.Key === person.Key; }));
+      });
+    }).catch(function (err) { console.error('Cinematheque:', err); });
+
+    return slot;
   }
 
   function openPerson(name) {

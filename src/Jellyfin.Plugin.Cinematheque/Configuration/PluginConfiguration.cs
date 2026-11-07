@@ -73,8 +73,16 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool SyncCollections { get; set; }
 
     /// <summary>
-    /// Gets or sets the collections the plugin created. It never deletes them: a collection whose
-    /// movement is hidden or removed, or whose sync is turned off, is simply left alone.
+    /// Gets or sets the people who get a Jellyfin collection, chosen one by one by the
+    /// administrator. They do not depend on <see cref="SyncCollections"/>: adding someone is
+    /// already the choice.
+    /// </summary>
+    public CollectedPerson[] CollectedPeople { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the collections the plugin created. A collection whose movement is hidden or
+    /// removed, or whose sync is turned off, is simply left alone; only removing a person can
+    /// delete theirs, and only when the administrator asks.
     /// </summary>
     public MovementCollectionLink[] ManagedCollections { get; set; } = [];
 
@@ -124,5 +132,22 @@ public class PluginConfiguration : BasePluginConfiguration
         CustomMovements = [.. CustomMovements ?? [], .. Movements.Where(m => !_version01BuiltInIds.Contains(m.Id, StringComparer.OrdinalIgnoreCase))];
         Movements = [];
         return true;
+    }
+
+    /// <summary>
+    /// Gives a key to the collection links saved before 0.5, which only had a movement id.
+    /// </summary>
+    /// <returns><c>true</c> when the configuration changed and should be saved.</returns>
+    public bool MigrateCollectionLinks()
+    {
+        MovementCollectionLink[] legacy = (ManagedCollections ?? [])
+            .Where(c => string.IsNullOrWhiteSpace(c.Key) && !string.IsNullOrWhiteSpace(c.MovementId))
+            .ToArray();
+        foreach (MovementCollectionLink link in legacy)
+        {
+            link.Key = MovementCollectionLink.MovementPrefix + link.MovementId;
+        }
+
+        return legacy.Length > 0;
     }
 }
