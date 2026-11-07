@@ -9,6 +9,14 @@
         "imageUrl": "https://raw.githubusercontent.com/gauthier-se/jellyfin-plugin-cinematheque/main/docs/brand/logo.png",
         "versions": [
             {
+                "version": "0.5.0.0",
+                "changelog": "Administrators can give directors, actors and screenwriters a collection of their films, picked one by one in the plugin settings or from their page in the tab, named after the role and with their portrait as poster. A collection is no longer emptied when its source finds no films. See CHANGELOG.md.\n",
+                "targetAbi": "12.1.0.0",
+                "sourceUrl": "https://github.com/gauthier-se/jellyfin-plugin-cinematheque/releases/download/v0.5.0/cinematheque_0.5.0.0.zip",
+                "checksum": "1a664d19bb96fbb140d02a267bdea90f",
+                "timestamp": "2026-11-07T08:01:17Z"
+            },
+            {
                 "version": "0.4.0.0",
                 "changelog": "Adds 13 movements, 26 in all, and about 60 directors to the existing ones. Every built-in now lists its essential films, and its page shows the ones missing from your library and its leading directors. Movements can exclude films. A movement you edited keeps your version until you restore it. See CHANGELOG.md.\n",
                 "targetAbi": "12.1.0.0",
